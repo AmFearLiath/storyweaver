@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Storyweaver – Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0d0d1a; color: #c8c8e0; min-height: 100vh; }
+    a { color: #9090cc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Header ── */
+    #header { background: #13132a; border-bottom: 1px solid #2a2a50; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    #header h1 { font-size: 1.2rem; color: #b8a0e0; flex: 1; }
+    .hdr-btn { background: #2a2a50; border: 1px solid #4a4a80; color: #c8c8e0; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+    .hdr-btn:hover { background: #3a3a70; }
+
+    /* ── Login overlay ── */
+    #loginOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    #loginBox { background: #1a1a35; border: 1px solid #3a3a70; border-radius: 12px; padding: 32px; width: 320px; display: flex; flex-direction: column; gap: 12px; }
+    #loginBox h2 { color: #b8a0e0; text-align: center; margin-bottom: 8px; }
+    .inp { background: #0d0d1a; border: 1px solid #3a3a70; color: #c8c8e0; padding: 8px 12px; border-radius: 6px; width: 100%; font-size: 0.95rem; }
+    .inp:focus { outline: none; border-color: #7060c0; }
+    .btn-primary { background: #5040a0; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; width: 100%; }
+    .btn-primary:hover { background: #6050c0; }
+    #loginError { color: #f08080; font-size: 0.85rem; text-align: center; display: none; }
+
+    /* ── Tabs ── */
+    #tabs { display: flex; gap: 4px; padding: 16px 24px 0; border-bottom: 1px solid #2a2a50; background: #13132a; }
+    .tab { padding: 8px 20px; border-radius: 8px 8px 0 0; cursor: pointer; background: #1a1a35; border: 1px solid #2a2a50; border-bottom: none; color: #9090cc; font-size: 0.9rem; }
+    .tab.active { background: #0d0d1a; color: #d0c0ff; border-color: #4a4a80; }
+
+    /* ── Content ── */
+    #content { padding: 24px; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── Tables ── */
+    .tbl-wrap { overflow-x: auto; margin-top: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { background: #1e1e40; color: #b0a0d0; padding: 8px 12px; text-align: left; border-bottom: 2px solid #3a3a70; white-space: nowrap; }
+    td { padding: 6px 12px; border-bottom: 1px solid #1e1e30; vertical-align: top; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    tr:hover td { background: #1a1a30; }
+    .td-wrap { white-space: normal; word-break: break-word; }
+
+    /* ── Action buttons ── */
+    .btn-sm { padding: 3px 10px; font-size: 0.78rem; border-radius: 4px; cursor: pointer; border: none; }
+    .btn-del { background: #5a1010; color: #f08080; }
+    .btn-del:hover { background: #7a1818; }
+    .btn-edit { background: #1a3050; color: #80c0f0; }
+    .btn-edit:hover { background: #254070; }
+    .btn-save { background: #1a4020; color: #80e090; }
+    .btn-save:hover { background: #256030; }
+
+    /* ── Story selector ── */
+    .story-sel { background: #1a1a35; border: 1px solid #3a3a70; color: #c8c8e0; padding: 7px 12px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 8px; }
+    .story-sel:focus { outline: none; border-color: #7060c0; }
+
+    /* ── Inline editor ── */
+    .edit-inp { background: #1a1a35; border: 1px solid #7060c0; color: #c8c8e0; padding: 3px 8px; border-radius: 4px; font-size: 0.85rem; width: 100%; }
+    .edit-inp:focus { outline: none; }
+
+    /* ── Log panel ── */
+    #logBox { background: #080810; border: 1px solid #2a2a50; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.78rem; white-space: pre-wrap; overflow-y: auto; max-height: 70vh; color: #f08080; }
+
+    /* ── Overview cards ── */
+    .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+    .card { background: #1a1a35; border: 1px solid #3a3a60; border-radius: 10px; padding: 20px 28px; min-width: 160px; }
+    .card h3 { font-size: 0.8rem; color: #9090cc; margin-bottom: 8px; }
+    .card .num { font-size: 2rem; color: #b8a0e0; }
+
+    /* ── Msg ── */
+    #msg { position: fixed; bottom: 24px; right: 24px; background: #1a4020; border: 1px solid #40a060; color: #80e090; padding: 10px 18px; border-radius: 8px; font-size: 0.9rem; display: none; z-index: 200; }
+    #msg.err { background: #2a0a0a; border-color: #a03030; color: #f08080; }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>🛡️ Admin-Login</h2>
+    <input id="loginUser" class="inp" type="text" placeholder="Benutzername" autofocus value="admin">
+    <input id="loginPass" class="inp" type="password" placeholder="Passwort" value="admin123">
+    <button class="btn-primary" onclick="doLogin()">Anmelden</button>
+    <div id="loginError">Ungültige Zugangsdaten</div>
+    <div style="margin-top:8px;font-size:0.78rem;color:#7070a0;text-align:center">Standard: <b style="color:#9090cc">admin</b> / <b style="color:#9090cc">admin123</b></div>
+  </div>
+</div>
+
+<!-- Header -->
+<div id="header">
+  <h1>Storyweaver – Admin</h1>
+  <span id="headerUser" style="color:#9090cc;font-size:.85rem"></span>
+  <a href="/static/index.html" class="hdr-btn">← Zum Spiel</a>
+  <button class="hdr-btn" onclick="doLogout()">Abmelden</button>
+</div>
+
+<!-- Tabs -->
+<div id="tabs">
+  <div class="tab active" onclick="switchTab('overview')">Übersicht</div>
+  <div class="tab" onclick="switchTab('users')">Benutzer</div>
+  <div class="tab" onclick="switchTab('stories')">Geschichten</div>
+  <div class="tab" onclick="switchTab('characters')">Charaktere</div>
+  <div class="tab" onclick="switchTab('events')">Ereignisse</div>
+  <div class="tab" onclick="switchTab('config')">Konfiguration</div>
+  <div class="tab" onclick="switchTab('logs')">LLM-Logs</div>
+</div>
+
+<!-- Content -->
+<div id="content">
+
+  <!-- OVERVIEW -->
+  <div id="panel-overview" class="panel active">
+    <div class="cards">
+      <div class="card"><h3>Benutzer</h3><div class="num" id="ovUserCount">…</div></div>
+      <div class="card"><h3>Geschichten</h3><div class="num" id="ovStoryCount">…</div></div>
+      <div class="card"><h3>Charaktere</h3><div class="num" id="ovCharCount">…</div></div>
+      <div class="card"><h3>Ereignisse</h3><div class="num" id="ovEventCount">…</div></div>
+    </div>
+    <div style="margin-top:28px">
+      <h2 style="color:#b8a0e0;font-size:1rem;margin-bottom:12px">Globale Konfiguration</h2>
+      <div class="tbl-wrap">
+        <table><thead><tr><th>Schlüssel</th><th>Wert</th></tr></thead>
+        <tbody id="ovConfigBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- USERS -->
+  <div id="panel-users" class="panel">
+    <button class="btn-primary" style="margin-top:16px;width:auto;padding:8px 20px" onclick="loadUsers()">🔄 Aktualisieren</button>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Benutzername</th><th>Erstellt</th><th>Aktionen</th></tr></thead>
+        <tbody id="usersBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- STORIES -->
+  <div id="panel-stories" class="panel">
+    <button class="btn-primary" style="margin-top:16px;width:auto;padding:8px 20px" onclick="loadStories()">🔄 Aktualisieren</button>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>User</th><th>Name</th><th>Beschreibung</th><th>Szenen</th><th>Erstellt</th><th>Aktionen</th></tr></thead>
+        <tbody id="storiesBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CHARACTERS -->
+  <div id="panel-characters" class="panel">
+    <div style="display:flex;align-items:center;gap:12px;margin-top:16px">
+      <select id="charStorySelect" class="story-sel" onchange="loadCharacters()">
+        <option value="">– Geschichte wählen –</option>
+      </select>
+      <button class="btn-primary" style="width:auto;padding:7px 16px" onclick="loadCharacters()">🔄</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Rolle</th><th>Status</th><th>Protag.</th><th>Alter</th><th>Aktionen</th></tr></thead>
+        <tbody id="charsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div id="panel-events" class="panel">
+    <div style="display:flex;align-items:center;gap:12px;margin-top:16px">
+      <select id="evStorySelect" class="story-sel" onchange="loadEvents()">
+        <option value="">– Geschichte wählen –</option>
+      </select>
+      <button class="btn-primary" style="width:auto;padding:7px 16px" onclick="loadEvents()">🔄</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Szene</th><th>Aktion</th><th>Vorschau</th><th>Erstellt</th><th>Aktionen</th></tr></thead>
+        <tbody id="eventsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CONFIG -->
+  <div id="panel-config" class="panel">
+    <button class="btn-primary" style="margin-top:16px;width:auto;padding:8px 20px" onclick="loadConfig()">🔄 Aktualisieren</button>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Schlüssel</th><th>Wert</th><th>Aktionen</th></tr></thead>
+        <tbody id="configBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LOGS -->
+  <div id="panel-logs" class="panel">
+    <div style="display:flex;align-items:center;gap:12px;margin-top:16px;margin-bottom:12px">
+      <label style="color:#9090cc;font-size:.9rem">Letzte <input id="logLines" type="number" value="100" min="10" max="2000" class="edit-inp" style="width:70px;display:inline"> Zeilen</label>
+      <button class="btn-primary" style="width:auto;padding:7px 16px" onclick="loadLogs()">🔄 Laden</button>
+      <button class="btn-sm btn-del" onclick="clearLogView()">✕ Ansicht leeren</button>
+    </div>
+    <div id="logBox">Noch keine Logs geladen.</div>
+  </div>
+
+</div>
+
+<div id="msg"></div>
+
+<script>
+'use strict';
+// ── State ──────────────────────────────────────────────────────────────────
+let TOKEN = sessionStorage.getItem('admin_token') || '';
+let currentTab = 'overview';
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showMsg(text, isErr = false) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = isErr ? 'err' : '';
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', isErr ? 6000 : 3000);
+}
+
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
+  };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (r.status === 401) { TOKEN = ''; sessionStorage.removeItem('admin_token'); showLogin(); return null; }
+  if (!r.ok) { showMsg(await r.text(), true); return null; }
+  return r.json();
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+function showLogin() {
+  // Clear any stale token so it doesn't cause repeated 401s on next load
+  TOKEN = '';
+  sessionStorage.removeItem('admin_token');
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('loginUser').focus();
+}
+function hideLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!r.ok) {
+      const detail = await r.json().catch(() => ({}));
+      err.textContent = detail.detail || `Fehler ${r.status}`;
+      err.style.display = 'block';
+      return;
+    }
+    const data = await r.json();
+    TOKEN = data.token;
+    sessionStorage.setItem('admin_token', TOKEN);
+    document.getElementById('headerUser').textContent = username;
+    hideLogin();
+    loadAll();
+  } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+}
+
+async function doLogout() {
+  await api('POST', '/api/auth/logout', {});
+  TOKEN = '';
+  sessionStorage.removeItem('admin_token');
+  showLogin();
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.remove('active'));
+  document.querySelectorAll('.tab')[['overview','users','stories','characters','events','config','logs'].indexOf(name)].classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  currentTab = name;
+  if (name === 'overview')    loadOverview();
+  if (name === 'users')       loadUsers();
+  if (name === 'stories')     loadStories();
+  if (name === 'characters')  { populateStorySel('charStorySelect'); loadCharacters(); }
+  if (name === 'events')      { populateStorySel('evStorySelect');   loadEvents(); }
+  if (name === 'config')      loadConfig();
+  if (name === 'logs')        loadLogs();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+async function loadAll() {
+  await loadOverview();
+}
+
+async function populateStorySel(selId) {
+  const sel = document.getElementById(selId);
+  const stories = await api('GET', '/api/admin/stories');
+  if (!stories) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">– Geschichte wählen –</option>';
+  stories.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `#${s.id} ${s.name}`;
+    if (String(s.id) === prev) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+// ── OVERVIEW ─────────────────────────────────────────────────────────────
+async function loadOverview() {
+  const d = await api('GET', '/api/admin/overview');
+  if (!d) return;
+  document.getElementById('ovUserCount').textContent  = d.users.length;
+  document.getElementById('ovStoryCount').textContent = d.stories.length;
+  document.getElementById('ovCharCount').textContent  = d.char_count;
+  document.getElementById('ovEventCount').textContent = d.event_count;
+  const tb = document.getElementById('ovConfigBody');
+  tb.innerHTML = '';
+  (d.global_config || []).forEach(row => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(row.key)}</td><td>${esc(row.value)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const users = await api('GET', '/api/admin/users');
+  if (!users) return;
+  const tb = document.getElementById('usersBody');
+  tb.innerHTML = '';
+  users.forEach(u => {
+    const tr = document.createElement('tr');
+    tr.dataset.uid = u.id;
+    tr.innerHTML = `
+      <td>${esc(u.id)}</td>
+      <td><span class="disp-username">${esc(u.username)}</span></td>
+      <td>${esc(u.created_at)}</td>
+      <td>
+        <button class="btn-sm btn-edit" onclick="editUser(${u.id})">✏ Bearbeiten</button>
+        <button class="btn-sm btn-del" onclick="deleteUser(${u.id},'${esc(u.username)}')">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function editUser(uid) {
+  const tr = document.querySelector(`#usersBody tr[data-uid='${uid}']`);
+  const nameSpan = tr.querySelector('.disp-username');
+  const cur = nameSpan.textContent;
+  nameSpan.outerHTML = `
+    <input class="edit-inp" id="eu-name-${uid}" value="${esc(cur)}" placeholder="Benutzername">
+    <input class="edit-inp" id="eu-pass-${uid}" type="password" placeholder="Neues Passwort (leer = unverändert)" style="margin-top:4px">`;
+  tr.querySelector('.btn-edit').outerHTML = `<button class="btn-sm btn-save" onclick="saveUser(${uid})">💾 Speichern</button>`;
+}
+
+async function saveUser(uid) {
+  const username = document.getElementById(`eu-name-${uid}`).value.trim();
+  const password = document.getElementById(`eu-pass-${uid}`).value;
+  if (!username) { showMsg('Benutzername darf nicht leer sein.', true); return; }
+  const r = await api('PUT', `/api/admin/users/${uid}`, { username, password });
+  if (r) { showMsg('Benutzer gespeichert.'); loadUsers(); }
+}
+
+async function deleteUser(uid, name) {
+  if (!confirm(`Benutzer "${name}" und alle zugehörigen Daten löschen?`)) return;
+  const r = await api('DELETE', `/api/admin/users/${uid}`);
+  if (r) { showMsg('Benutzer gelöscht.'); loadUsers(); }
+}
+
+// ── STORIES ──────────────────────────────────────────────────────────────
+async function loadStories() {
+  const stories = await api('GET', '/api/admin/stories');
+  if (!stories) return;
+  const tb = document.getElementById('storiesBody');
+  tb.innerHTML = '';
+  stories.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.dataset.sid = s.id;
+    tr.innerHTML = `
+      <td>${esc(s.id)}</td>
+      <td>${esc(s.user_id)}</td>
+      <td class="td-wrap"><span class="disp-name">${esc(s.name)}</span></td>
+      <td class="td-wrap"><span class="disp-desc">${esc(s.description)}</span></td>
+      <td>${esc(s.scene_counter)}</td>
+      <td>${esc(s.created_at ? s.created_at.slice(0,10) : '')}</td>
+      <td>
+        <button class="btn-sm btn-edit" onclick="editStory(${s.id})">✏</button>
+        <button class="btn-sm btn-del" onclick="deleteStory(${s.id},'${esc(s.name)}')">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function editStory(sid) {
+  const tr = document.querySelector(`#storiesBody tr[data-sid='${sid}']`);
+  const nameSpan = tr.querySelector('.disp-name');
+  const descSpan = tr.querySelector('.disp-desc');
+  nameSpan.outerHTML = `<input class="edit-inp" id="es-name-${sid}" value="${esc(nameSpan.textContent)}">`;
+  descSpan.outerHTML = `<textarea class="edit-inp" id="es-desc-${sid}" rows="2">${esc(descSpan.textContent)}</textarea>`;
+  tr.querySelector('.btn-edit').outerHTML = `<button class="btn-sm btn-save" onclick="saveStory(${sid})">💾</button>`;
+}
+
+async function saveStory(sid) {
+  const name = document.getElementById(`es-name-${sid}`)?.value.trim();
+  const description = document.getElementById(`es-desc-${sid}`)?.value ?? '';
+  if (!name) { showMsg('Name darf nicht leer sein.', true); return; }
+  const r = await api('PUT', `/api/admin/stories/${sid}`, { name, description });
+  if (r) { showMsg('Geschichte gespeichert.'); loadStories(); }
+}
+
+async function deleteStory(sid, name) {
+  if (!confirm(`Geschichte "${name}" und alle zugehörigen Daten löschen?`)) return;
+  const r = await api('DELETE', `/api/admin/stories/${sid}`);
+  if (r) { showMsg('Geschichte gelöscht.'); loadStories(); }
+}
+
+// ── CHARACTERS ───────────────────────────────────────────────────────────
+async function loadCharacters() {
+  const sid = document.getElementById('charStorySelect').value;
+  if (!sid) return;
+  const chars = await api('GET', `/api/admin/characters/${sid}`);
+  if (!chars) return;
+  const tb = document.getElementById('charsBody');
+  tb.innerHTML = '';
+  chars.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${esc(c.id)}</td>
+      <td>${esc(c.name)}</td>
+      <td>${esc(c.role)}</td>
+      <td>${esc(c.status)}</td>
+      <td>${c.is_protagonist ? '✔' : ''}</td>
+      <td>${esc(c.age)}</td>
+      <td>
+        <a href="#" onclick="showCharDetail(${c.id});return false" style="color:#80c0f0;font-size:.8rem">Detail</a>
+        <button class="btn-sm btn-del" onclick="deleteChar(${c.id},'${esc(c.name)}')">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function showCharDetail(id) {
+  // Re-fetch and show in a simple alert; can be enhanced to a modal
+  api('GET', `/api/admin/characters/${document.getElementById('charStorySelect').value}`).then(chars => {
+    const c = chars?.find(x => x.id === id);
+    if (!c) return;
+    const info = Object.entries(c).map(([k,v]) => `${k}: ${v}`).join('\n');
+    alert(info);
+  });
+}
+
+async function deleteChar(id, name) {
+  if (!confirm(`Charakter "${name}" löschen?`)) return;
+  const r = await api('DELETE', `/api/admin/characters/${id}`);
+  if (r) { showMsg('Charakter gelöscht.'); loadCharacters(); }
+}
+
+// ── EVENTS ───────────────────────────────────────────────────────────────
+async function loadEvents() {
+  const sid = document.getElementById('evStorySelect').value;
+  if (!sid) return;
+  const events = await api('GET', `/api/admin/events/${sid}`);
+  if (!events) return;
+  const tb = document.getElementById('eventsBody');
+  tb.innerHTML = '';
+  events.forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${esc(e.id)}</td>
+      <td>${esc(e.scene_number)}</td>
+      <td class="td-wrap" style="max-width:160px">${esc(e.player_action)}</td>
+      <td class="td-wrap" style="max-width:260px">${esc(e.story_preview)}</td>
+      <td>${esc(e.created_at ? e.created_at.slice(0,16) : '')}</td>
+      <td><button class="btn-sm btn-del" onclick="deleteEvent(${e.id})">🗑</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+async function deleteEvent(id) {
+  if (!confirm(`Ereignis #${id} löschen?`)) return;
+  const r = await api('DELETE', `/api/admin/events/${id}`);
+  if (r) { showMsg('Ereignis gelöscht.'); loadEvents(); }
+}
+
+// ── CONFIG ──────────────────────────────────────────────────────────────
+async function loadConfig() {
+  const cfg = await api('GET', '/api/admin/config');
+  if (!cfg) return;
+  const tb = document.getElementById('configBody');
+  tb.innerHTML = '';
+  cfg.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.dataset.key = row.key;
+    tr.innerHTML = `
+      <td>${esc(row.key)}</td>
+      <td><input class="edit-inp" id="cfg-${CSS.escape(row.key)}" value="${esc(row.value)}"></td>
+      <td><button class="btn-sm btn-save" onclick="saveConfig('${esc(row.key)}')">💾</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+async function saveConfig(key) {
+  const el = document.getElementById('cfg-' + CSS.escape(key));
+  const value = el ? el.value : '';
+  const r = await api('PUT', '/api/admin/config', { key, value });
+  if (r) showMsg('Konfiguration gespeichert.');
+}
+
+// ── LOGS ────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const lines = parseInt(document.getElementById('logLines').value) || 100;
+  const d = await api('GET', `/api/admin/logs?lines=${lines}`);
+  if (!d) return;
+  const box = document.getElementById('logBox');
+  if (d.lines.length === 0) { box.textContent = 'Keine Log-Einträge gefunden.'; return; }
+  box.textContent = d.lines.join('\n');
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLogView() {
+  document.getElementById('logBox').textContent = 'Ansicht geleert.';
+}
+
+// ── Keyboard ────────────────────────────────────────────────────────────
+document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('loginUser').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('loginPass').focus(); });
+
+// ── Boot ─────────────────────────────────────────────────────────────────
+(async () => {
+  if (TOKEN) {
+    // Validate the stored token before trusting it
+    const test = await fetch('/api/admin/overview', {
+      headers: { 'Authorization': 'Bearer ' + TOKEN }
+    });
+    if (test.ok) {
+      hideLogin();
+      const d = await test.json();
+      // Populate overview directly from the response we already fetched
+      document.getElementById('ovUserCount').textContent  = d.users.length;
+      document.getElementById('ovStoryCount').textContent = d.stories.length;
+      document.getElementById('ovCharCount').textContent  = d.char_count;
+      document.getElementById('ovEventCount').textContent = d.event_count;
+      const tb = document.getElementById('ovConfigBody');
+      tb.innerHTML = '';
+      (d.global_config || []).forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${esc(row.key)}</td><td>${esc(row.value)}</td>`;
+        tb.appendChild(tr);
+      });
+    } else {
+      showLogin();
+    }
+  } else {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>

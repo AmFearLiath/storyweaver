@@ -1,0 +1,56 @@
+# ─── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── Virtuelle Umgebungen ──────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ─── Datenbank ─────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Logs ──────────────────────────────────────────────────
+logs/*.log
+*.log
+
+# ─── Hochgeladene Avatare (nutzerspezifisch) ───────────────
+frontend/assets/avatars/*
+!frontend/assets/avatars/.gitkeep
+
+# ─── Exportierte Charakter-JSONs (nutzerspezifisch) ────────
+charakters/
+
+# ─── Umgebungsvariablen / Secrets ─────────────────────────
+.env
+.env.*
+*.secret
+
+# ─── IDE / Editor ──────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ─── macOS ─────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ─── Windows ───────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Storyweaver — KI Game Master</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="landing-page">
+
+<!-- ══ NAV ═══════════════════════════════════════════════════════════════════ -->
+<nav class="land-nav">
+  <span class="land-logo">
+    <img src="/static/assets/img/logo.png" alt="Storyweaver" class="land-logo-img" />
+    Storyweaver
+  </span>
+  <div class="land-nav-actions">
+    <a href="/admin" class="btn btn-outline" style="font-size:0.85rem;padding:7px 14px" title="Admin-Bereich">🛡️ Admin</a>
+    <button class="btn btn-outline" onclick="openModal('loginModal')">Anmelden</button>
+    <button class="btn btn-primary" onclick="openModal('registerModal')">Jetzt starten</button>
+  </div>
+</nav>
+
+<!-- ══ HERO ═══════════════════════════════════════════════════════════════════ -->
+<section class="land-hero">
+  <div class="land-hero-bg" style="background-image:url('/static/assets/img/storyweaver.png')"></div>
+  <div class="land-hero-content">
+    <div class="land-tagline">Vollständig lokal · Offline-fähig · Powered by Ollama</div>
+    <h1 class="land-title">Deine Geschichte.<br/>Dein Game Master.</h1>
+    <p class="land-subtitle">
+      Storyweaver ist ein KI-gestütztes Textadventure, das vollständig auf deinem Rechner läuft.
+      Ein lokales Sprachmodell schlüpft in die Rolle eines meisterhaften Game Masters —
+      kein Server, keine Cloud, keine Grenzen.
+    </p>
+    <div class="land-cta">
+      <button class="btn btn-primary btn-xl" onclick="openModal('registerModal')">
+        🎮 Abenteuer beginnen
+      </button>
+      <button class="btn btn-outline btn-xl" onclick="openModal('loginModal')">
+        Bereits registriert?
+      </button>
+    </div>
+    <div class="land-hero-stats">
+      <div class="land-stat"><span class="land-stat-num">∞</span><span>Geschichten</span></div>
+      <div class="land-stat"><span class="land-stat-num">100%</span><span>Offline</span></div>
+      <div class="land-stat"><span class="land-stat-num">0€</span><span>Kosten</span></div>
+    </div>
+  </div>
+  <div class="land-hero-scroll">↓ Mehr erfahren</div>
+</section>
+
+<!-- ══ FEATURES ════════════════════════════════════════════════════════════════ -->
+<section class="land-section land-features">
+  <div class="land-section-inner">
+    <h2 class="land-section-title">Was macht Storyweaver besonders?</h2>
+    <p class="land-section-sub">Ein vollständiges Rollenspiel-Erlebnis — vollständig auf deinem Rechner.</p>
+    <div class="land-feature-grid">
+      <div class="land-feature-card">
+        <div class="land-feature-icon">🧠</div>
+        <h3>KI Game Master</h3>
+        <p>Ein lokales Sprachmodell (via Ollama) leitet dein Abenteuer. Der Game Master merkt sich Ereignisse, entwickelt die Welt und reagiert auf deine Entscheidungen.</p>
+      </div>
+      <div class="land-feature-card">
+        <div class="land-feature-icon">🌍</div>
+        <h3>Eigene Welten</h3>
+        <p>Erstelle Fantasy-Königreiche, düstere Science-Fiction-Dystopien oder historische Abenteuer. Definiere Welt, Atmosphäre, Geschichte und Spielregeln selbst.</p>
+      </div>
+      <div class="land-feature-card">
+        <div class="land-feature-icon">👤</div>
+        <h3>Lebendige Charaktere</h3>
+        <p>Gib deinen Figuren echte Persönlichkeiten: Alter, körperliche Merkmale, Kleidung, Vorlieben, Abneigungen, Superkräfte — und Beziehungen zueinander.</p>
+      </div>
+      <div class="land-feature-card">
+        <div class="land-feature-icon">📖</div>
+        <h3>Episches Storytelling</h3>
+        <p>Jede Geschichte ist einzigartig. Der Game Master passt Stil, Detailgrad und Ton deinen Vorgaben an — von schlichten Beschreibungen bis zu literarischer Prosa.</p>
+      </div>
+      <div class="land-feature-card">
+        <div class="land-feature-icon">⚙️</div>
+        <h3>Volle Kontrolle</h3>
+        <p>Definiere verbotene Phrasen, Wort-Alternativen, Stilbeispiele und Spielregeln. Steuere Temperature, Top-P und Repeat Penalty des Sprachmodells präzise.</p>
+      </div>
+      <div class="land-feature-card">
+        <div class="land-feature-icon">🔒</div>
+        <h3>100% Privat & Offline</h3>
+        <p>Keine Daten verlassen deinen Rechner. Keine Cloud, keine Abonnements, keine Limits. Deine Geschichten gehören dir — für immer und komplett offline.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HOW IT WORKS ══════════════════════════════════════════════════════════ -->
+<section class="land-section land-howto">
+  <div class="land-section-inner">
+    <h2 class="land-section-title">So funktioniert es</h2>
+    <div class="land-steps">
+      <div class="land-step">
+        <div class="land-step-num">1</div>
+        <div class="land-step-content">
+          <h3>Account erstellen</h3>
+          <p>Registriere dich mit einem Benutzernamen und Passwort. Alles bleibt lokal auf deinem Rechner — keine E-Mail nötig.</p>
+        </div>
+      </div>
+      <div class="land-step-arrow">→</div>
+      <div class="land-step">
+        <div class="land-step-num">2</div>
+        <div class="land-step-content">
+          <h3>Geschichte erstellen</h3>
+          <p>Gib deiner Welt einen Namen, wähle das Genre und füge Charaktere mit ihren einzigartigen Eigenschaften hinzu.</p>
+        </div>
+      </div>
+      <div class="land-step-arrow">→</div>
+      <div class="land-step">
+        <div class="land-step-num">3</div>
+        <div class="land-step-content">
+          <h3>Abenteuer erleben</h3>
+          <p>Der KI Game Master schreibt deine Geschichte. Triff Entscheidungen, forme deine Welt — jede Konsequenz ist permanent.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ REQUIREMENTS ══════════════════════════════════════════════════════════ -->
+<section class="land-section land-requirements">
+  <div class="land-section-inner">
+    <h2 class="land-section-title">Voraussetzungen</h2>
+    <div class="land-req-grid">
+      <div class="land-req-card">
+        <div class="land-req-icon">🦙</div>
+        <h3>Ollama</h3>
+        <p>Installiere Ollama und lade ein Sprachmodell herunter (z.B. <code>ollama pull llama3</code>). Kostenlos, lokal, schnell.</p>
+      </div>
+      <div class="land-req-card">
+        <div class="land-req-icon">🐍</div>
+        <h3>Python 3.10+</h3>
+        <p>FastAPI als Backend. Starte das Spiel einfach mit <code>start.bat</code> oder <code>python run.py</code>.</p>
+      </div>
+      <div class="land-req-card">
+        <div class="land-req-icon">🌐</div>
+        <h3>Browser</h3>
+        <p>Kein zusätzliches Frontend-Framework. Öffne einfach <code>http://localhost:8000</code> im Browser.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CTA SECTION ════════════════════════════════════════════════════════════ -->
+<section class="land-final-cta">
+  <div class="land-section-inner" style="text-align:center">
+    <h2>Bereit für dein Abenteuer?</h2>
+    <p style="color:var(--text-sec);margin:14px 0 30px">Erstelle deinen Account und beginne deine erste Geschichte mit Storyweaver.</p>
+    <button class="btn btn-primary btn-xl" onclick="openModal('registerModal')">
+      🎮 Jetzt registrieren — kostenlos
+    </button>
+  </div>
+</section>
+
+<!-- ══ FOOTER ════════════════════════════════════════════════════════════════ -->
+<footer class="land-footer">
+  <span class="land-logo" style="font-size:15px">
+    <img src="/static/assets/img/logo.png" alt="Storyweaver" class="land-logo-img" style="height:20px;vertical-align:middle;margin-right:6px" />
+    Storyweaver
+  </span>
+  <span style="color:var(--text-dim)">Vollständig lokal &amp; offline · Powered by Ollama &amp; FastAPI</span>
+</footer>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: REGISTRIERUNG
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="registerModal" class="modal-overlay hidden" onclick="closeModal('registerModal')">
+  <div class="modal-content" onclick="event.stopPropagation()" style="max-width:420px">
+    <div class="modal-header">
+      <h2>⚔️ Account erstellen</h2>
+      <button class="modal-close" onclick="closeModal('registerModal')">✕</button>
+    </div>
+    <p style="color:var(--text-sec);margin-bottom:18px;font-size:13px">
+      Alles bleibt lokal auf deinem Rechner. Keine E-Mail erforderlich.
+    </p>
+    <div class="form-group">
+      <label>Benutzername</label>
+      <input type="text" id="regUsername" class="input-field" placeholder="z.B. Keldran" autocomplete="username" />
+    </div>
+    <div class="form-group">
+      <label>Passwort</label>
+      <input type="password" id="regPassword" class="input-field" placeholder="Mindestens 4 Zeichen" autocomplete="new-password" />
+    </div>
+    <div id="regError" class="form-error hidden"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="doRegister()">✅ Registrieren</button>
+      <button class="btn btn-ghost" onclick="switchAuthModal()">Bereits registriert →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: LOGIN
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="loginModal" class="modal-overlay hidden" onclick="closeModal('loginModal')">
+  <div class="modal-content" onclick="event.stopPropagation()" style="max-width:420px">
+    <div class="modal-header">
+      <h2>🗝️ Anmelden</h2>
+      <button class="modal-close" onclick="closeModal('loginModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Benutzername</label>
+      <input type="text" id="loginUsername" class="input-field" placeholder="Dein Benutzername" autocomplete="username" />
+    </div>
+    <div class="form-group">
+      <label>Passwort</label>
+      <input type="password" id="loginPassword" class="input-field" placeholder="Dein Passwort" autocomplete="current-password" />
+    </div>
+    <div id="loginError" class="form-error hidden"></div>
+    <div class="form-hint" style="margin-bottom:4px">
+      Standard-Zugangsdaten (nur wenn du migriert hast): <code>spieler / spieler123</code>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="doLogin()">🗝️ Anmelden</button>
+      <button class="btn btn-ghost" onclick="switchAuthModalReverse()">Neu registrieren →</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+// ── Check if already logged in ─────────────────────────────────────────────
+(async function() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  try {
+    const resp = await fetch('/api/auth/me', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (resp.ok) window.location.href = '/play';
+    else localStorage.removeItem('token');
+  } catch {}
+})();
+
+function openModal(id) {
+  document.getElementById(id).classList.remove('hidden');
+  const inputs = document.getElementById(id).querySelectorAll('input');
+  if (inputs.length) inputs[0].focus();
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function switchAuthModal() { closeModal('registerModal'); openModal('loginModal'); }
+function switchAuthModalReverse() { closeModal('loginModal'); openModal('registerModal'); }
+
+async function doRegister() {
+  const u = document.getElementById('regUsername').value.trim();
+  const p = document.getElementById('regPassword').value;
+  const err = document.getElementById('regError');
+  err.classList.add('hidden');
+  try {
+    const resp = await fetch('/api/auth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { err.textContent = data.detail || 'Fehler'; err.classList.remove('hidden'); return; }
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('username', data.user.username);
+    window.location.href = '/play';
+  } catch (e) { err.textContent = 'Verbindungsfehler'; err.classList.remove('hidden'); }
+}
+
+async function doLogin() {
+  const u = document.getElementById('loginUsername').value.trim();
+  const p = document.getElementById('loginPassword').value;
+  const err = document.getElementById('loginError');
+  err.classList.add('hidden');
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { err.textContent = data.detail || 'Fehler'; err.classList.remove('hidden'); return; }
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('username', data.user.username);
+    window.location.href = '/play';
+  } catch (e) { err.textContent = 'Verbindungsfehler'; err.classList.remove('hidden'); }
+}
+
+// Enter key support
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (!document.getElementById('registerModal').classList.contains('hidden')) doRegister();
+    else if (!document.getElementById('loginModal').classList.contains('hidden')) doLogin();
+  }
+});
+</script>
+</body>
+</html>

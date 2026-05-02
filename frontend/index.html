@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Storyweaver — KI Game Master</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- ══ HEADER ════════════════════════════════════════════════════════════════ -->
+<header class="app-header">
+  <div class="header-left">
+    <span class="logo">
+      <img src="/static/assets/img/logo.png" alt="Storyweaver" class="header-logo-img" />
+      <span class="header-logo-text">Storyweaver</span>
+    </span>
+    <button class="btn-story-picker" id="storyPickerBtn" onclick="openStoryModal()">
+      <span id="storyName">Geschichte wählen...</span>
+      <span class="story-chevron">▾</span>
+    </button>
+    <span class="scene-badge" id="sceneBadge">Szene 0</span>
+  </div>
+  <div class="header-right">
+    <div class="ollama-status">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Verbinde...</span>
+    </div>
+    <a href="/admin" class="btn btn-ghost btn-sm" title="Admin-Bereich" target="_blank">🛡️ Admin</a>
+    <button class="btn btn-ghost btn-sm" onclick="openLLMModal()" title="LLM-Einstellungen">⚙️ LLM</button>
+    <button class="btn btn-ghost btn-sm" onclick="openHistoryModal()">📜 Verlauf</button>
+    <button class="btn btn-danger-ghost btn-sm" onclick="confirmReset()">🔄 Neu starten</button>
+    <div class="user-menu-wrap">
+      <button class="btn-user" id="userMenuBtn" onclick="toggleUserMenu()">
+        <span>👤</span><span id="userName">...</span><span>▾</span>
+      </button>
+      <div class="user-dropdown hidden" id="userDropdown">
+        <button onclick="logout()">🚪 Abmelden</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══ LAYOUT ════════════════════════════════════════════════════════════════ -->
+<main class="app-layout">
+
+  <!-- ── LINKE SIDEBAR ──────────────────────────────────────────────────── -->
+  <aside class="sidebar sidebar-left">
+    <section class="panel">
+      <div class="panel-header">
+        <h3 class="panel-title">👤 Charaktere</h3>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-icon-sm" onclick="openNPCModal()" title="NPC aus Geschichte übernehmen" style="font-size:14px">🎭</button>
+          <button class="btn btn-icon-sm" onclick="openCharModal()" title="Neuer Charakter">＋</button>
+        </div>
+      </div>
+      <div id="characterList" class="character-list"></div>
+    </section>
+    <section class="panel" id="worldItemsPanel" style="display:none">
+      <div class="panel-header" onclick="toggleWorldItems()" style="cursor:pointer" title="Ein-/ausklappen">
+        <h3 class="panel-title">🎒 Gegenstände</h3>
+        <span id="worldItemsChevron" style="font-size:11px;color:var(--text-dim)">▾</span>
+      </div>
+      <div id="worldItemsList" class="world-items-list"></div>
+    </section>
+    <div class="sidebar-actions">
+      <button class="btn btn-sidebar-action" onclick="openWorldModal()">🌍 Welt &amp; Regeln</button>
+      <button class="btn btn-sidebar-action" onclick="openStyleModal()">✍️ Stil &amp; Sprache</button>
+    </div>
+  </aside>
+
+  <!-- ── STORY CENTER ───────────────────────────────────────────────────── -->
+  <div class="story-container">
+
+    <!-- Start Screen -->
+    <div id="startScreen" class="start-screen">
+      <div class="start-content">
+        <img src="/static/assets/img/logo.png" alt="Storyweaver" class="start-logo-img" />
+        <h1 class="start-title">Storyweaver</h1>
+        <p class="start-subtitle">KI Game Master · Vollständig lokal · Powered by Ollama</p>
+        <div id="startModelInfo" class="model-info">Ollama wird geprüft...</div>
+        <button class="btn btn-primary btn-large" onclick="startGame()" id="startBtn">
+          🎮 Abenteuer beginnen
+        </button>
+      </div>
+    </div>
+
+    <!-- Story Window -->
+    <div id="storyWindow" class="story-window hidden">
+      <div id="storyContent" class="story-content"></div>
+      <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p>Der Game Master schreibt...</p>
+      </div>
+    </div>
+
+    <!-- Options Panel -->
+    <div id="optionsPanel" class="options-panel hidden">
+      <h4 class="options-title">🎯 Deine Entscheidung</h4>
+      <div id="optionButtons" class="option-buttons"></div>
+      <div class="free-input-section">
+        <div class="free-input-label">✍️ Eigene Aktion eingeben</div>
+        <div class="free-input-row">
+          <input type="text" id="freeInput" class="free-input"
+                 placeholder="Was tust du? Schreibe deine eigene Aktion..." />
+          <button class="btn btn-primary" onclick="submitFreeAction()" id="freeActionBtn">→</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: GESCHICHTE AUSWÄHLEN / NEU ERSTELLEN
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="storyModal" class="modal-overlay hidden" onclick="closeStoryModal()">
+  <div class="modal-content modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>📚 Meine Geschichten</h2>
+      <button class="modal-close" onclick="closeStoryModal()">✕</button>
+    </div>
+
+    <div id="storyList" class="story-list"></div>
+
+    <div class="story-create-form" id="storyCreateForm">
+      <h3 style="font-size:14px;color:var(--accent);margin-bottom:12px">✨ Neue Geschichte erstellen</h3>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label>Name der Geschichte <span class="required">*</span></label>
+          <input type="text" id="newStoryName" class="input-field" placeholder="z.B. Die Schatten von Arvandor" />
+        </div>
+        <div class="form-group">
+          <label>Genre</label>
+          <select id="newStoryGenre" class="select-field">
+            <option value="Fantasy">Fantasy</option>
+            <option value="Dark Fantasy">Dark Fantasy</option>
+            <option value="Sci-Fi">Science Fiction</option>
+            <option value="Horror">Horror</option>
+            <option value="Mittelalter">Historisches Mittelalter</option>
+            <option value="Dystopie">Dystopie</option>
+            <option value="Cyberpunk">Cyberpunk</option>
+            <option value="Steampunk">Steampunk</option>
+            <option value="Postapokalypse">Postapokalypse</option>
+            <option value="Krimi">Krimi / Detektiv</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Kurzbeschreibung</label>
+        <textarea id="newStoryDesc" class="textarea-field" rows="2"
+                  placeholder="Worum geht es in dieser Geschichte?"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="createNewStory()">✨ Geschichte erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: NPC AUS GESCHICHTE ÜBERNEHMEN
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="npcModal" class="modal-overlay hidden" onclick="closeNPCModal()">
+  <div class="modal-content" style="max-width:520px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>🎭 NPC in Charakterliste aufnehmen</h2>
+      <button class="modal-close" onclick="closeNPCModal()">✕</button>
+    </div>
+    <div style="padding:0 24px 8px">
+      <p class="form-hint" style="margin-bottom:16px">
+        Gib den Namen und eine kurze Beschreibung eines Nebendarstellers aus der Geschichte ein.
+        Die KI erstellt daraus ein vollständiges Charakterprofil — passend zur aktuellen Spielwelt.
+      </p>
+      <div class="form-group">
+        <label>Name des Charakters <span class="required">*</span></label>
+        <input type="text" id="npcName" class="input-field" placeholder="z.B. Tavita die Schankwirtin" />
+      </div>
+      <div class="form-group">
+        <label>Kurzbeschreibung <span class="label-hint">— Was weißt du bereits über diese Person?</span></label>
+        <textarea id="npcDescription" class="textarea-field" rows="3"
+                  placeholder="z.B. Alte Schankwirtin mit Narbe über dem Auge, die Geheimnisse sammelt..."></textarea>
+      </div>
+      <div id="npcGenerating" class="hidden" style="text-align:center;padding:16px 0;color:var(--text-dim)">
+        <div class="loading-spinner" style="margin:0 auto 8px"></div>
+        KI erstellt Charakterprofil...
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-accent" onclick="generateNPCProfile()" id="npcGenBtn">🤖 KI-Profil generieren &amp; bearbeiten</button>
+      <button class="btn btn-outline" onclick="openNPCManual()">✏️ Manuell ausfüllen</button>
+      <button class="btn btn-ghost" onclick="closeNPCModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: CHARAKTER DETAIL / BEARBEITEN
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="charModal" class="modal-overlay hidden" onclick="closeCharModal()">
+  <div class="modal-content modal-char" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="charModalTitle">Charakter</h2>
+      <button class="modal-close" onclick="closeCharModal()">✕</button>
+    </div>
+    <input type="hidden" id="editCharId" />
+
+    <!-- Tabs -->
+    <div class="modal-tabs" id="charTabs">
+      <button class="tab-btn active" onclick="switchTab('ctab-basics', this)">📋 Grunddaten</button>
+      <button class="tab-btn" onclick="switchTab('ctab-looks', this)">👁️ Erscheinungsbild</button>
+      <button class="tab-btn" onclick="switchTab('ctab-personality', this)">⚔️ Charakter</button>
+      <button class="tab-btn" onclick="switchTab('ctab-state', this)">🎒 Zustand</button>
+      <button class="tab-btn" onclick="switchTab('ctab-relations', this)">🤝 Beziehungen</button>
+      <button class="tab-btn" onclick="switchTab('ctab-avatar', this)">🖼️ Avatar</button>
+    </div>
+
+    <!-- Tab: Grunddaten -->
+    <div id="ctab-basics" class="tab-content">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label>Name <span class="required">*</span></label>
+          <input type="text" id="editCharName" class="input-field" placeholder="z.B. Aric von Dorn" />
+        </div>
+        <div class="form-group">
+          <label>Rolle <span class="required">*</span></label>
+          <input type="text" id="editCharRole" class="input-field"
+                 placeholder="Protagonist, Antagonist, Verbündeter..." />
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label>Status</label>
+          <select id="editCharStatus" class="select-field">
+            <option value="alive">Lebendig</option>
+            <option value="dead">Tot</option>
+            <option value="missing">Verschwunden</option>
+            <option value="unknown">Unbekannt</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Rolle im Spiel</label>
+          <div class="protagonist-toggle">
+            <label class="toggle-label">
+              <input type="checkbox" id="editIsProtagonist" />
+              <span class="toggle-track"></span>
+              <span class="toggle-text">Hauptprotagonist ⭐</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- KI-Schnellgenerator -->
+      <div class="ai-gen-box">
+        <div class="ai-gen-header">✨ KI-Schnellgenerator</div>
+        <p class="form-hint" style="margin:4px 0 8px">Name eingeben, dann Stichworte (optional) — die KI füllt alle Felder automatisch aus.</p>
+        <textarea id="aiCharHint" class="textarea-field" rows="2"
+          placeholder="z.B. zynischer Söldner, Narbe übers Auge, mittleres Alter, misstrauisch gegenüber Magiern..."></textarea>
+        <button id="aiGenCharBtn" class="btn btn-ai" onclick="aiGenerateCharacter()">✨ KI-Profil generieren</button>
+      </div>
+    </div>
+
+    <!-- Tab: Erscheinungsbild -->
+    <div id="ctab-looks" class="tab-content hidden">
+      <div class="form-group">
+        <label>Alter</label>
+        <input type="text" id="editCharAge" class="input-field" placeholder="z.B. 28 Jahre, Mitte dreißig" />
+      </div>
+      <div class="form-group">
+        <label>Körperliche Merkmale</label>
+        <textarea id="editCharPhysical" class="textarea-field" rows="3"
+                  placeholder="Größe, Statur, Augenfarbe, Narben, besondere Merkmale..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Standardkleidung / typisches Erscheinungsbild</label>
+        <textarea id="editCharClothing" class="textarea-field" rows="3"
+                  placeholder="zerbeulte Lederrüstung, schwarzer Umhang, immer mit Kapuze..."></textarea>
+      </div>
+    </div>
+
+    <!-- Tab: Charakter & Fähigkeiten -->
+    <div id="ctab-personality" class="tab-content hidden">
+      <div class="form-group">
+        <label>Persönlichkeit &amp; Hintergrundgeschichte</label>
+        <textarea id="editCharDesc" class="textarea-field" rows="4"
+                  placeholder="Wer ist diese Person? Persönlichkeit, Motivation, Geheimnis..."></textarea>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label>Vorlieben</label>
+          <textarea id="editCharLikes" class="textarea-field" rows="2"
+                    placeholder="Taktische Herausforderungen, altes Bier..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Abneigungen</label>
+          <textarea id="editCharDislikes" class="textarea-field" rows="2"
+                    placeholder="Magie, Adel, Menschenmassen..."></textarea>
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label>Superkräfte / Besondere Fähigkeiten</label>
+          <textarea id="editCharPowers" class="textarea-field" rows="2"
+                    placeholder="Pyrokinese, Unsichtbarkeit, meisterhafter Schwertkämpfer..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Lieblingswaffe / -ausrüstung / -spielzeug</label>
+          <textarea id="editCharWeapon" class="textarea-field" rows="2"
+                    placeholder="Langschwert 'Dämmerklinge', verzierter Dolch, Federkiel..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Zustand (Spielzeit-Daten, KI-gepflegt) -->
+    <div id="ctab-state" class="tab-content hidden">
+      <p class="form-hint" style="margin-bottom:12px">
+        Wird nach jeder Szene automatisch vom Game Master aktualisiert. Kann auch manuell angepasst werden.
+      </p>
+      <div class="form-group">
+        <label>Aktuell getragen <span style="font-size:11px;color:var(--text-dim)">(überschreibt Standard-Kleidung)</span></label>
+        <textarea id="editCharCurrentClothing" class="textarea-field" rows="2"
+                  placeholder="z.B. weißes Hemd, durchnässt vom Regen, barfuß..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Inventar <span style="font-size:11px;color:var(--text-dim)">(was der Charakter dabei hat)</span></label>
+        <div id="inventoryList" class="tag-list"></div>
+        <div class="tag-add-row">
+          <input type="text" id="inventoryInput" class="input-field input-sm"
+                 placeholder="Gegenstand hinzufügen..." onkeydown="if(event.key==='Enter'){addInventoryItem();event.preventDefault()}" />
+          <button class="btn btn-outline btn-sm" onclick="addInventoryItem()">＋</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Erfahrungen &amp; Erlebnisse <span style="font-size:11px;color:var(--text-dim)">(chronologisch, neueste unten)</span></label>
+        <div id="experiencesList" class="experience-list"></div>
+        <div class="tag-add-row">
+          <input type="text" id="experienceInput" class="input-field input-sm"
+                 placeholder="Neue Erfahrung hinzufügen..." onkeydown="if(event.key==='Enter'){addExperienceItem();event.preventDefault()}" />
+          <button class="btn btn-outline btn-sm" onclick="addExperienceItem()">＋</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Beziehungen -->
+    <div id="ctab-relations" class="tab-content hidden">
+      <p class="form-hint" style="margin-bottom:12px">
+        Definiere, wie dieser Charakter zu anderen steht. Der Game Master nutzt diese Beziehungen aktiv in der Geschichte.
+      </p>
+      <div class="relations-header">
+        <span>Charakter</span>
+        <span>Beziehungstyp</span>
+        <span>Beschreibung</span>
+        <span></span>
+      </div>
+      <div id="relationsList" class="relations-list"></div>
+      <button class="btn btn-outline btn-sm mt-2" onclick="addRelation()">＋ Beziehung hinzufügen</button>
+    </div>
+
+    <!-- Tab: Avatar -->
+    <div id="ctab-avatar" class="tab-content hidden">
+      <div class="avatar-tab-layout">
+        <!-- Preview -->
+        <div class="avatar-preview-wrap">
+          <div class="avatar-preview" id="charAvatarPreview">
+            <span class="avatar-placeholder">👤</span>
+          </div>
+          <p class="form-hint" style="text-align:center;margin-top:8px">Aktueller Avatar</p>
+        </div>
+        <!-- Actions -->
+        <div class="avatar-actions-wrap">
+          <div class="form-group">
+            <label>Avatar hochladen <span style="font-size:11px;color:var(--text-dim)">(PNG, JPG, WebP — max. 5 MB)</span></label>
+            <div class="avatar-upload-row">
+              <input type="file" id="avatarFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="onAvatarFileSelected()" />
+              <button class="btn btn-outline" onclick="document.getElementById('avatarFileInput').click()">📁 Datei wählen</button>
+              <button class="btn btn-primary" id="avatarUploadBtn" onclick="uploadAvatar()" disabled>⬆️ Hochladen</button>
+            </div>
+            <p id="avatarFileName" class="form-hint" style="margin-top:4px">Keine Datei ausgewählt</p>
+          </div>
+          <div class="form-group" style="margin-top:16px">
+            <label>Für ChatGPT-GPT exportieren</label>
+            <p class="form-hint" style="margin-bottom:8px">
+              Exportiere alle Charakter-Informationen als JSON und lade die Datei in ein ChatGPT-GPT zur Avatar-Erstellung hoch. Das generierte Bild kannst du dann oben hochladen.
+            </p>
+            <button class="btn btn-outline" onclick="exportCharacterJSON()">📄 JSON exportieren</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveCharacter()">💾 Speichern</button>
+      <button class="btn btn-danger-ghost hidden" id="deleteCharBtn" onclick="deleteCurrentChar()">🗑️ Löschen</button>
+      <button class="btn btn-ghost" onclick="closeCharModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: WELT & REGELN
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="worldModal" class="modal-overlay hidden" onclick="closeWorldModal()">
+  <div class="modal-content modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>🌍 Welt, Genre &amp; Spielregeln</h2>
+      <button class="modal-close" onclick="closeWorldModal()">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="tab-btn active" onclick="switchTab('wtab-world', this)">🌍 Welt</button>
+      <button class="tab-btn" onclick="switchTab('wtab-genre', this)">🎭 Genre &amp; Rahmen</button>
+      <button class="tab-btn" onclick="switchTab('wtab-rules', this)">📋 Spielregeln</button>
+      <button class="tab-btn" onclick="switchTab('wtab-exportimport', this)">📦 Export / Import</button>
+    </div>
+
+    <!-- Tab: Welt -->
+    <div id="wtab-world" class="tab-content">
+      <div class="ai-generate-box">
+        <div class="ai-generate-label">🤖 Welt von KI erschaffen lassen</div>
+        <div class="ai-generate-row">
+          <input type="text" id="worldGenPrompt" class="input-field"
+                 placeholder="z.B. Postapokalyptische Wüste mit Technologie-Ruinen und Stammeskämpfen" />
+          <button class="btn btn-accent btn-sm" onclick="generateWorld()" id="worldGenBtn">✨ Generieren</button>
+        </div>
+        <p class="form-hint">Kurzbeschreibung eingeben → KI füllt alle Felder automatisch aus. Du kannst alles danach anpassen.</p>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label>Name der Welt</label>
+          <input type="text" id="worldName" class="input-field" placeholder="z.B. Arvandor" />
+        </div>
+        <div class="form-group">
+          <label>Zeitalter</label>
+          <input type="text" id="worldEra" class="input-field" placeholder="z.B. Mittelalter-Fantasy, Jahr 3042" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Atmosphäre</label>
+        <input type="text" id="worldAtmosphere" class="input-field" placeholder="düster, bedrohlich, mystisch, hoffnungsvoll..." />
+      </div>
+      <div class="form-group">
+        <label>Weltbeschreibung</label>
+        <textarea id="worldDesc" class="textarea-field" rows="4"
+                  placeholder="Geographie, Kulturen, Konflikte, Geschichte..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Aktuelles Szenario</label>
+        <textarea id="scenarioDesc" class="textarea-field" rows="3"
+                  placeholder="Was passiert gerade? Der aktuelle Stand der Dinge..."></textarea>
+      </div>
+    </div>
+
+    <!-- Tab: Genre & Rahmen -->
+    <div id="wtab-genre" class="tab-content hidden">
+      <div class="form-group">
+        <label>Genre</label>
+        <div class="genre-select-row">
+          <select id="storyGenre" class="select-field" style="flex:1">
+            <option value="Fantasy">Fantasy</option>
+            <option value="Dark Fantasy">Dark Fantasy</option>
+            <option value="Sci-Fi">Science Fiction</option>
+            <option value="Horror">Horror</option>
+            <option value="Mittelalter">Historisches Mittelalter</option>
+            <option value="Dystopie">Dystopie</option>
+            <option value="Märchen">Märchen / Fabel</option>
+            <option value="Cyberpunk">Cyberpunk</option>
+            <option value="Steampunk">Steampunk</option>
+            <option value="Modern">Modern / Gegenwart</option>
+            <option value="Postapokalypse">Postapokalypse</option>
+            <option value="Krimi">Krimi / Detektiv</option>
+          </select>
+          <input type="text" id="customGenreInput" class="input-field" style="flex:1" placeholder="Eigenes Genre eingeben..." />
+          <button class="btn btn-outline btn-sm" onclick="addCustomGenre()">＋ Hinzufügen</button>
+        </div>
+        <p class="form-hint">Eigenes Genre eingeben und mit ＋ zur Liste hinzufügen. Das zuletzt hinzugefügte wird ausgewählt.</p>
+      </div>
+      <div class="form-group">
+        <label>Story-Rahmen &amp; Tonalität</label>
+        <textarea id="storyFrame" class="textarea-field" rows="7"
+                  placeholder="Übergeordneter Konflikt, Themen, Motive, Richtung der Geschichte..."></textarea>
+      </div>
+    </div>
+
+    <!-- Tab: Spielregeln -->
+    <div id="wtab-rules" class="tab-content hidden">
+      <p class="form-hint" style="margin-bottom:14px">Wähle vordefinierte Regeln oder füge eigene hinzu:</p>
+      <div id="presetRulesList" class="preset-rules-list"></div>
+      <div class="form-group mt-3">
+        <label>Eigene Regeln <span class="label-hint">— kommagetrennt oder eine pro Zeile</span></label>
+        <textarea id="customRules" class="textarea-field" rows="4"
+                  placeholder="z.B. Magie kostet immer Lebensenergie, Silber tötet Vampire sofort..."></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveWorldConfig()">💾 Speichern</button>
+      <button class="btn btn-ghost" onclick="closeWorldModal()">Schließen</button>
+    </div>
+
+    <!-- Tab: Export / Import -->
+    <div id="wtab-exportimport" class="tab-content hidden">
+      <div class="form-group">
+        <label>Konfiguration exportieren</label>
+        <p class="form-hint">Exportiert Welt, Genre, Spielregeln, Stil und alle Charaktere als JSON-Datei.</p>
+        <button class="btn btn-outline" onclick="exportConfig()">⬇️ Als JSON exportieren</button>
+      </div>
+      <hr style="margin:18px 0;border-color:var(--border)">
+      <div class="form-group">
+        <label>Konfiguration importieren</label>
+        <p class="form-hint">Lädt eine zuvor exportierte JSON-Datei und ersetzt alle aktuellen Einstellungen und Charaktere.</p>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="file" id="importFileInput" accept=".json" style="flex:1" onchange="importConfig(this)" />
+        </div>
+        <p class="form-hint" style="margin-top:6px;color:var(--danger)">⚠️ Alle bestehenden Charaktere werden ersetzt.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: STIL & SPRACHE
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="styleModal" class="modal-overlay hidden" onclick="closeStyleModal()">
+  <div class="modal-content modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>✍️ Stil &amp; Spracheinstellungen</h2>
+      <button class="modal-close" onclick="closeStyleModal()">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="tab-btn active" onclick="switchTab('stab-style', this)">🎨 Schreibstil</button>
+      <button class="tab-btn" onclick="switchTab('stab-examples', this)">📝 Stilbeispiele</button>
+      <button class="tab-btn" onclick="switchTab('stab-forbidden', this)">🚫 Verbotene Phrasen</button>
+      <button class="tab-btn" onclick="switchTab('stab-words', this)">🔄 Wort-Alternativen</button>
+    </div>
+
+    <!-- Tab: Schreibstil -->
+    <div id="stab-style" class="tab-content">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label>Sprachstil</label>
+          <select id="languageStyle" class="select-field">
+            <option value="einfach">Einfach — klar, direkt</option>
+            <option value="neutral">Neutral — sachlich</option>
+            <option value="literarisch">Literarisch — gehobene Prosa</option>
+            <option value="düster">Düster — bedrohlicher Ton</option>
+            <option value="humorvoll">Humorvoll — ironisch, witzig</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Detailgrad</label>
+          <select id="detailLevel" class="select-field">
+            <option value="niedrig">Niedrig — 3–4 Sätze</option>
+            <option value="mittel">Mittel — 1–2 Absätze</option>
+            <option value="hoch">Hoch — 2–4 Absätze</option>
+          </select>
+        </div>
+      </div>
+      <p class="form-hint">Diese Einstellungen wirken ab der nächsten Szene.</p>
+    </div>
+
+    <!-- Tab: Stilbeispiele -->
+    <div id="stab-examples" class="tab-content hidden">
+      <p class="form-hint" style="margin-bottom:14px">
+        Füge Gut/Schlecht-Paare hinzu. Der Game Master nutzt diese Beispiele aktiv als Referenz.
+      </p>
+      <div id="styleExamplesList" class="style-examples-list"></div>
+      <button class="btn btn-outline btn-sm mt-2" onclick="addStyleExample()">＋ Beispielpaar hinzufügen</button>
+    </div>
+
+    <!-- Tab: Verbotene Phrasen -->
+    <div id="stab-forbidden" class="tab-content hidden">
+      <div class="form-group">
+        <label>Verbotene Phrasen <span class="label-hint">— eine pro Zeile</span></label>
+        <textarea id="forbiddenPhrases" class="textarea-field" rows="11"
+                  placeholder="atmet tief durch&#10;nickt nachdenklich&#10;seufzt schwer&#10;lächelt wissend&#10;runzelt die Stirn"></textarea>
+      </div>
+      <p class="form-hint">Diese Phrasen darf der Game Master unter keinen Umständen verwenden.</p>
+    </div>
+
+    <!-- Tab: Wort-Alternativen -->
+    <div id="stab-words" class="tab-content hidden">
+      <p class="form-hint" style="margin-bottom:12px">
+        Verbotene Wörter mit <b>kommagetrennte Alternativen</b>. Der Game Master wählt daraus.
+      </p>
+      <div class="word-alts-header">
+        <span>Verbotenes Wort</span>
+        <span></span>
+        <span>Alternativen (kommagetrennt)</span>
+        <span></span>
+      </div>
+      <div id="wordAltsList" class="word-alts-list"></div>
+      <button class="btn btn-outline btn-sm mt-2" onclick="addWordAlt()">＋ Eintrag hinzufügen</button>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveStyleConfig()">💾 Speichern</button>
+      <button class="btn btn-ghost" onclick="closeStyleModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: LLM EINSTELLUNGEN
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="llmModal" class="modal-overlay hidden" onclick="closeLLMModal()">
+  <div class="modal-content" onclick="event.stopPropagation()" style="max-width:520px">
+    <div class="modal-header">
+      <h2>⚙️ LLM Einstellungen</h2>
+      <button class="modal-close" onclick="closeLLMModal()">✕</button>
+    </div>
+
+    <div class="form-group">
+      <label class="setting-label">Modell</label>
+      <select id="ollamaModel" class="select-field"><option value="">Lade Modelle...</option></select>
+    </div>
+
+    <div class="form-group">
+      <label class="setting-label">🌍 Ausgabesprache</label>
+      <select id="outputLanguage" class="select-field">
+        <option value="Deutsch">Deutsch</option>
+        <option value="English">English</option>
+        <option value="Français">Français</option>
+        <option value="Español">Español</option>
+        <option value="Italiano">Italiano</option>
+        <option value="Polski">Polski</option>
+        <option value="Português">Português</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="setting-label">📐 Kontextfenster (num_ctx)</label>
+      <select id="numCtx" class="select-field">
+        <option value="1024">1 024 Token — sehr klein (z.B. TinyLlama)</option>
+        <option value="2048">2 048 Token — klein</option>
+        <option value="4096">4 096 Token — Standard ✓</option>
+        <option value="8192">8 192 Token — groß</option>
+        <option value="16384">16 384 Token — sehr groß</option>
+        <option value="32768">32 768 Token — maximal</option>
+      </select>
+      <p class="setting-desc" style="margin-top:4px">Größeres Fenster = mehr Kontext, aber mehr RAM. Bei Abstürzen verkleinern.</p>
+    </div>
+
+    <div class="llm-setting">
+      <div class="setting-header">
+        <label class="setting-label">🌡️ Temperatur</label>
+        <span class="setting-value" id="tempValue">0.70</span>
+      </div>
+      <input type="range" id="temperature" class="slider" min="0.1" max="1.5" step="0.05" value="0.7"
+             oninput="updateSlider('temperature','tempValue')" />
+      <div class="setting-ticks"><span>logisch</span><span>ausgewogen</span><span>chaotisch</span></div>
+      <p class="setting-desc"><span class="desc-low">0.2–0.5: logisch</span> · <span class="desc-mid">0.6–0.9: ausgewogen</span> · <span class="desc-high">1.0+: kreativ</span></p>
+    </div>
+
+    <div class="llm-setting">
+      <div class="setting-header">
+        <label class="setting-label">🎲 Top-P</label>
+        <span class="setting-value" id="topPValue">0.90</span>
+      </div>
+      <input type="range" id="top_p" class="slider" min="0.1" max="1.0" step="0.05" value="0.9"
+             oninput="updateSlider('top_p','topPValue')" />
+      <div class="setting-ticks"><span>konservativ</span><span style="text-align:right">kreativ</span></div>
+    </div>
+
+    <div class="llm-setting">
+      <div class="setting-header">
+        <label class="setting-label">🔁 Repeat Penalty</label>
+        <span class="setting-value" id="repPenValue">1.10</span>
+      </div>
+      <input type="range" id="repeat_penalty" class="slider" min="1.0" max="2.0" step="0.05" value="1.1"
+             oninput="updateSlider('repeat_penalty','repPenValue')" />
+      <div class="setting-ticks"><span>Wdh. möglich</span><span style="text-align:right">keine Wdh.</span></div>
+    </div>
+
+    <div class="llm-setting">
+      <div class="setting-header">
+        <label class="setting-label">✏️ Max. Ausgabe-Token</label>
+        <span class="setting-value" id="numPredictValue">1600</span>
+      </div>
+      <input type="range" id="num_predict" class="slider" min="200" max="3200" step="100" value="1600"
+             oninput="updateSliderInt('num_predict','numPredictValue')" />
+      <div class="setting-ticks"><span>kurz (200)</span><span style="text-align:right">lang (3200)</span></div>
+      <p class="setting-desc">Maximale Länge der LLM-Antwort pro Szene. Mehr Token = längere Texte, aber langsamer.</p>
+    </div>
+
+    <div class="llm-setting">
+      <div class="setting-header">
+        <label class="setting-label">🧠 Spielgedächtnis</label>
+        <span class="setting-value" id="memoryDepthValue">3</span>
+      </div>
+      <input type="range" id="memory_depth" class="slider" min="1" max="10" step="1" value="3"
+             oninput="updateSliderInt('memory_depth','memoryDepthValue')" />
+      <div class="setting-ticks"><span>1 Szene</span><span style="text-align:right">10 Szenen</span></div>
+      <p class="setting-desc">Wie viele vergangene Szenen das Modell berücksichtigt. Mehr = bessere Kontinuität, aber mehr Kontext-Verbrauch.</p>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveLLMSettings()">💾 Speichern</button>
+      <button class="btn btn-ghost" onclick="closeLLMModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: VERLAUF
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="historyModal" class="modal-overlay hidden" onclick="closeHistoryModal()">
+  <div class="modal-content modal-wide" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>📜 Spielverlauf</h2>
+      <button class="modal-close" onclick="closeHistoryModal()">✕</button>
+    </div>
+    <div id="historyContent" class="history-content"></div>
+  </div>
+</div>
+
+<!-- ══ TOAST ════════════════════════════════════════════════════════════════ -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
