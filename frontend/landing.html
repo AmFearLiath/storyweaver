@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
@@ -7,165 +7,618 @@
   <meta http-equiv="Pragma" content="no-cache">
   <title>Storyweaver — KI Game Master</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <style>
+  /* ═══════════════════════════════════════════════════════════════════════════
+     STORYWEAVER — MARKETING PAGE  (alle Klassen: mkt-*)
+     Basis-Variablen & Buttons aus style.css
+  ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* ── Base ─────────────────────────────────────────────────────────────── */
+  .mkt-page { overflow-x: hidden; }
+
+  /* ── Nav ──────────────────────────────────────────────────────────────── */
+  .mkt-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px; height: 68px;
+    background: rgba(10,12,18,0); border-bottom: 1px solid transparent;
+    transition: background 0.4s ease, border-color 0.4s ease;
+  }
+  .mkt-nav.scrolled {
+    background: rgba(10,12,18,0.95);
+    backdrop-filter: blur(18px); border-color: var(--border);
+  }
+  .mkt-nav-logo {
+    display: flex; align-items: center; gap: 10px; text-decoration: none;
+    font-family: var(--font-story); font-size: 20px; font-weight: 700;
+    color: var(--accent); text-shadow: 0 0 24px rgba(200,168,75,0.5);
+    letter-spacing: 0.03em;
+  }
+  .mkt-nav-logo img { height: 22px; }
+  .mkt-nav-right { display: flex; gap: 10px; align-items: center; }
+
+  /* ── Hero ─────────────────────────────────────────────────────────────── */
+  .mkt-hero {
+    position: relative; height: 100vh; min-height: 620px;
+    overflow: hidden; display: flex; flex-direction: column;
+    align-items: center;
+  }
+
+  /* Slides */
+  .mkt-slides { position: absolute; inset: 0; z-index: 0; }
+  .mkt-slide {
+    position: absolute; inset: 0; opacity: 0;
+    transition: opacity 1.4s ease;
+    display: flex; align-items: center; justify-content: center;
+    padding-bottom: 35vh;
+  }
+  .mkt-slide.active { opacity: 1; }
+  .mkt-slide-bg {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center 20%;
+  }
+  .mkt-slide:nth-child(1) .mkt-slide-bg { background-image:
+    linear-gradient(160deg, rgba(18,5,38,0.88) 0%, rgba(55,15,90,0.35) 50%, rgba(8,6,18,0.94) 100%),
+    url('/static/assets/img/storyweaver.png'); }
+  .mkt-slide:nth-child(2) .mkt-slide-bg { background-image:
+    linear-gradient(160deg, rgba(4,14,36,0.92) 0%, rgba(8,50,70,0.35) 50%, rgba(4,8,18,0.96) 100%),
+    url('/static/assets/img/storyweaver.png'); }
+  .mkt-slide:nth-child(3) .mkt-slide-bg { background-image:
+    linear-gradient(160deg, rgba(30,4,4,0.92) 0%, rgba(75,12,8,0.35) 50%, rgba(12,4,4,0.96) 100%),
+    url('/static/assets/img/storyweaver.png'); }
+  .mkt-slide:nth-child(4) .mkt-slide-bg { background-image:
+    linear-gradient(160deg, rgba(22,16,2,0.92) 0%, rgba(70,52,8,0.35) 50%, rgba(12,8,2,0.96) 100%),
+    url('/static/assets/img/storyweaver.png'); }
+
+  .mkt-slide-quote { position: relative; z-index: 1; text-align: center; padding: 0 48px; max-width: 720px; }
+  .mkt-slide-genre {
+    display: inline-block; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.28em; padding: 4px 16px; border-radius: 20px;
+    margin-bottom: 22px; border: 1px solid;
+  }
+  .mkt-slide:nth-child(1) .mkt-slide-genre { color:#b08fff; border-color:rgba(150,80,255,0.35); background:rgba(100,40,200,0.12); }
+  .mkt-slide:nth-child(2) .mkt-slide-genre { color:#5cd0f5; border-color:rgba(40,160,210,0.35); background:rgba(20,100,160,0.12); }
+  .mkt-slide:nth-child(3) .mkt-slide-genre { color:#f07575; border-color:rgba(200,60,60,0.35); background:rgba(140,25,25,0.12); }
+  .mkt-slide:nth-child(4) .mkt-slide-genre { color:var(--accent); border-color:rgba(200,168,75,0.35); background:rgba(160,120,25,0.12); }
+  .mkt-slide-text {
+    font-family: var(--font-story); font-size: clamp(17px,2.4vw,25px);
+    font-style: italic; color: rgba(240,235,225,0.9); line-height: 1.65;
+    text-shadow: 0 2px 24px rgba(0,0,0,0.85);
+  }
+
+  /* Foreground: gradient + title + CTA */
+  .mkt-hero-fg {
+    position: relative; z-index: 10; margin-top: auto;
+    width: 100%; text-align: center;
+    background: linear-gradient(to bottom, transparent, rgba(10,12,18,0.82) 28%, var(--bg-deep) 68%);
+    padding: 80px 40px 70px;
+  }
+  .mkt-hero-title {
+    font-family: var(--font-story); font-size: clamp(42px,7.5vw,90px);
+    font-weight: 700; line-height: 1.05; letter-spacing: -0.02em;
+    color: var(--text-prim); text-shadow: 0 0 60px rgba(200,168,75,0.15);
+    margin-bottom: 10px;
+  }
+  .mkt-hero-title em { font-style: normal; color: var(--accent); text-shadow: 0 0 40px rgba(200,168,75,0.5); }
+  .mkt-hero-sub {
+    font-size: 16px; color: var(--text-sec); line-height: 1.75;
+    max-width: 480px; margin: 0 auto 34px;
+  }
+  .mkt-hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* Slide dots */
+  .mkt-dots {
+    position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 20;
+  }
+  .mkt-dot {
+    height: 6px; border-radius: 3px; background: rgba(255,255,255,0.25);
+    border: 1px solid rgba(255,255,255,0.12);
+    cursor: pointer; transition: all 0.3s ease;
+    width: 6px;
+  }
+  .mkt-dot.active { background: var(--accent); border-color: var(--accent); width: 22px; }
+
+  /* ── Pulse Ticker ─────────────────────────────────────────────────────── */
+  .mkt-pulse {
+    background: var(--bg-deep); padding: 22px 0;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    overflow: hidden; cursor: default;
+  }
+  .mkt-pulse-track {
+    display: flex; width: max-content; gap: 0;
+    animation: mkt-ticker 55s linear infinite;
+  }
+  .mkt-pulse:hover .mkt-pulse-track { animation-play-state: paused; }
+  @keyframes mkt-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .mkt-pulse-item {
+    display: flex; align-items: center; gap: 12px; padding: 0 40px;
+    white-space: nowrap; font-family: var(--font-story); font-style: italic;
+    font-size: 13px; color: var(--text-dim);
+  }
+  .mkt-pulse-sep { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); opacity: 0.5; flex-shrink: 0; }
+
+  /* ── Shared section typography ───────────────────────────────────────── */
+  .mkt-eyebrow {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.28em;
+    color: var(--accent); margin-bottom: 18px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .mkt-eyebrow::before { content: ''; display: block; width: 26px; height: 1px; background: var(--accent); }
+  .mkt-eyebrow.center { justify-content: center; }
+  .mkt-eyebrow.center::before { display: none; }
+  .mkt-h { font-family: var(--font-story); font-size: clamp(26px,3vw,46px); color: var(--text-prim); line-height: 1.18; margin-bottom: 20px; }
+  .mkt-p { color: var(--text-sec); font-size: 14px; line-height: 1.88; }
+  .mkt-p + .mkt-p { margin-top: 13px; }
+
+  /* ── Section: Game Master (split, L text / R terminal) ───────────────── */
+  .mkt-gm { display: grid; grid-template-columns: 1fr 1.65fr; }
+  .mkt-gm-left {
+    background: var(--bg-dark); padding: 90px 64px;
+    display: flex; flex-direction: column; justify-content: center;
+    border-right: 1px solid var(--border);
+  }
+  .mkt-gm-right { background: var(--bg-deep); padding: 70px 60px; display: flex; align-items: center; }
+
+  /* Terminal mockup */
+  .mkt-terminal {
+    width: 100%; max-width: 570px;
+    background: #090b12; border: 1px solid #252e48;
+    border-radius: var(--radius-lg); overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.65), 0 0 0 1px rgba(200,168,75,0.04);
+  }
+  .mkt-term-bar {
+    background: #131825; padding: 11px 16px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #252e48;
+  }
+  .mkt-term-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .mkt-term-dot:nth-child(1){background:#c84b4b} .mkt-term-dot:nth-child(2){background:#c8a84b} .mkt-term-dot:nth-child(3){background:#4bc884}
+  .mkt-term-title { flex: 1; text-align: center; font-size: 11px; color: #4a5a75; letter-spacing: 0.05em; }
+  .mkt-term-body { padding: 26px 28px; }
+  .mkt-term-scene { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.18em; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+  .mkt-term-scene::before { content: '▶'; font-size: 8px; }
+  .mkt-term-story { font-family: var(--font-story); font-size: 14px; color: #d8cfc0; line-height: 1.9; margin-bottom: 22px; }
+  .mkt-term-story em { font-style: normal; color: rgba(200,168,75,0.8); }
+  .mkt-term-line { height: 1px; background: #252e48; margin-bottom: 18px; }
+  .mkt-term-options { display: flex; flex-direction: column; gap: 8px; }
+  .mkt-term-opt {
+    background: #111827; border: 1px solid #252e48; border-radius: 6px;
+    padding: 10px 14px; font-size: 13px; color: #7a8ba5;
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mkt-term-opt:first-child { border-color: rgba(200,168,75,0.28); color: #c8c0b0; background: #141c2e; }
+  .mkt-term-opt-num { color: var(--accent); font-size: 11px; font-weight: 700; min-width: 14px; }
+
+  /* ── Section: Weltzustand (centered, 3-panel grid) ───────────────────── */
+  .mkt-world { background: var(--bg-dark); padding: 96px 48px; border-top: 1px solid var(--border); }
+  .mkt-world-head { text-align: center; max-width: 660px; margin: 0 auto 64px; }
+  .mkt-world-panels {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 1px; background: var(--border);
+    max-width: 1120px; margin: 0 auto;
+    border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .mkt-world-panel { background: var(--bg-card); padding: 28px 24px; }
+  .mkt-world-panel-head {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-dim);
+    padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+  }
+  .mkt-world-panel-head .icon { font-size: 15px; }
+  .mkt-wi { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(42,53,80,0.45); }
+  .mkt-wi:last-child { border-bottom: none; padding-bottom: 0; }
+  .mkt-wi-icon { font-size: 15px; flex-shrink: 0; margin-top: 2px; }
+  .mkt-wi-name { font-size: 13px; color: var(--text-prim); display: block; }
+  .mkt-wi-meta { font-size: 11px; color: var(--text-dim); display: block; margin-top: 3px; line-height: 1.5; }
+  .mkt-wi-name.clr-code { color: #4ac8e0; }
+  .mkt-wi-name.clr-lock { color: #7a6a9a; }
+  .mkt-wi-name.clr-obs  { color: #f09a4a; font-weight: 600; }
+  .mkt-wi-name.clr-trig { color: #f05555; font-weight: 700; }
+  .mkt-wi-name.clr-done { color: var(--text-dim); text-decoration: line-through; }
+
+  /* ── Section: Charaktere (reversed split, R text / L card) ──────────── */
+  .mkt-chars { display: grid; grid-template-columns: 1.3fr 1fr; }
+  .mkt-chars-left { background: var(--bg-deep); padding: 80px 64px; display: flex; align-items: center; }
+  .mkt-chars-right {
+    background: var(--bg-card); padding: 80px 60px;
+    display: flex; flex-direction: column; justify-content: center;
+    border-left: 1px solid var(--border);
+  }
+  .mkt-char-card {
+    width: 100%; max-width: 400px;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .mkt-char-top { background: var(--bg-dark); padding: 18px 22px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); }
+  .mkt-char-avatar { width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg,#2a1540,#142040); border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+  .mkt-char-name { font-family: var(--font-story); font-size: 18px; color: var(--text-prim); }
+  .mkt-char-role { font-size: 12px; color: var(--accent); margin-top: 2px; }
+  .mkt-char-body { padding: 18px 22px; }
+  .mkt-char-row { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid rgba(42,53,80,0.4); font-size: 13px; }
+  .mkt-char-row:last-child { border-bottom: none; }
+  .mkt-char-label { color: var(--text-dim); width: 110px; flex-shrink: 0; }
+  .mkt-char-val { color: var(--text-sec); }
+  .mkt-feat-list { list-style: none; margin-top: 24px; display: flex; flex-direction: column; gap: 11px; }
+  .mkt-feat-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text-sec); line-height: 1.65; }
+  .mkt-feat-list li::before { content: '—'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+  /* ── Section: Kontrolle (full-width strip) ───────────────────────────── */
+  .mkt-control { background: var(--bg-deep); padding: 80px 0; border-top: 1px solid var(--border); }
+  .mkt-control-head { text-align: center; padding: 0 48px 52px; }
+  .mkt-ctrl-strip {
+    display: flex; gap: 1px; background: var(--border);
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .mkt-ctrl { flex: 1; background: var(--bg-card); padding: 30px 24px; text-align: center; transition: background 0.18s; }
+  .mkt-ctrl:hover { background: var(--bg-panel); }
+  .mkt-ctrl-icon { font-size: 30px; margin-bottom: 12px; }
+  .mkt-ctrl-name { font-size: 13px; color: var(--text-prim); font-weight: 600; margin-bottom: 7px; }
+  .mkt-ctrl-desc { font-size: 12px; color: var(--text-dim); line-height: 1.65; }
+  .mkt-ctrl-tag { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 12px; padding: 2px 12px; background: var(--accent-glow); }
+
+  /* ── Section: Setup (numbered steps with terminal aesthetic) ─────────── */
+  .mkt-setup { background: var(--bg-dark); padding: 96px 48px; }
+  .mkt-setup-wrap { max-width: 860px; margin: 0 auto; }
+  .mkt-steps { margin-top: 52px; position: relative; }
+  .mkt-steps::before { content: ''; position: absolute; left: 23px; top: 52px; bottom: 52px; width: 1px; background: linear-gradient(to bottom, var(--accent-dim), transparent); }
+  .mkt-step { display: grid; grid-template-columns: 48px 1fr; gap: 28px; padding: 34px 0; align-items: start; }
+  .mkt-step + .mkt-step { border-top: 1px solid var(--border); }
+  .mkt-step-num { width: 48px; height: 48px; border-radius: 50%; background: var(--bg-card); border: 1px solid var(--accent-dim); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 700; color: var(--accent); font-family: var(--font-story); flex-shrink: 0; position: relative; z-index: 1; }
+  .mkt-step-body { padding-top: 8px; }
+  .mkt-step-body h3 { font-size: 18px; color: var(--text-prim); margin-bottom: 8px; }
+  .mkt-step-body p { font-size: 13px; color: var(--text-sec); line-height: 1.75; margin-bottom: 14px; }
+  .mkt-code {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg-deep); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 7px 16px;
+    font-family: monospace; font-size: 13px; color: var(--accent);
+  }
+  .mkt-code-prompt { color: var(--text-dim); }
+  .mkt-codes { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ── Section: CTA ────────────────────────────────────────────────────── */
+  .mkt-cta {
+    position: relative; min-height: 56vh;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; overflow: hidden; padding: 80px 40px;
+  }
+  .mkt-cta-bg { position: absolute; inset: 0; background-image: url('/static/assets/img/storyweaver.png'); background-size: cover; background-position: center; opacity: 0.1; }
+  .mkt-cta-veil { position: absolute; inset: 0; background: radial-gradient(ellipse 65% 55% at 50% 50%, rgba(200,168,75,0.05) 0%, transparent 70%), linear-gradient(to bottom, var(--bg-deep), rgba(10,12,18,0.6) 50%, var(--bg-deep)); }
+  .mkt-cta-body { position: relative; z-index: 1; max-width: 580px; }
+  .mkt-cta-body h2 { font-family: var(--font-story); font-size: clamp(30px,5.5vw,58px); color: var(--text-prim); line-height: 1.18; margin-bottom: 14px; }
+  .mkt-cta-body h2 em { font-style: normal; color: var(--accent); }
+  .mkt-cta-body p { color: var(--text-sec); font-size: 15px; line-height: 1.8; margin-bottom: 36px; }
+  .mkt-badges { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-top: 36px; }
+  .mkt-badge { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
+  .mkt-badge::before { content: '✓'; color: var(--success); }
+
+  /* ── Footer ──────────────────────────────────────────────────────────── */
+  .mkt-footer { background: var(--bg-dark); border-top: 1px solid var(--border); padding: 28px 48px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--text-dim); }
+  .mkt-footer-logo { display: flex; align-items: center; gap: 9px; color: var(--accent); font-family: var(--font-story); font-size: 16px; }
+  .mkt-footer-logo img { height: 17px; }
+  .mkt-footer a { color: var(--text-dim); text-decoration: none; transition: color 0.18s; }
+  .mkt-footer a:hover { color: var(--accent); }
+
+  /* ── Responsive ──────────────────────────────────────────────────────── */
+  @media (max-width: 960px) {
+    .mkt-nav { padding: 0 20px; height: 58px; }
+    .mkt-gm, .mkt-chars { grid-template-columns: 1fr; }
+    .mkt-gm-left, .mkt-chars-right { padding: 52px 28px; }
+    .mkt-gm-right, .mkt-chars-left { padding: 40px 28px; }
+    .mkt-world-panels { grid-template-columns: 1fr; }
+    .mkt-ctrl-strip { flex-direction: column; gap: 0; }
+    .mkt-world, .mkt-setup, .mkt-control { padding-left: 24px; padding-right: 24px; }
+    .mkt-footer { padding: 20px 24px; }
+    .mkt-hero-title { font-size: clamp(36px, 9vw, 62px); }
+  }
+  </style>
 </head>
-<body class="landing-page">
+<body class="mkt-page">
 
 <!-- ══ NAV ═══════════════════════════════════════════════════════════════════ -->
-<nav class="land-nav">
-  <span class="land-logo">
-    <img src="/static/assets/img/logo.png" alt="Storyweaver" class="land-logo-img" />
+<nav class="mkt-nav" id="mktNav">
+  <a class="mkt-nav-logo" href="/">
+    <img src="/static/assets/img/logo.png" alt="Storyweaver" />
     Storyweaver
-  </span>
-  <div class="land-nav-actions">
-    <a href="/admin" class="btn btn-outline" style="font-size:0.85rem;padding:7px 14px" title="Admin-Bereich">🛡️ Admin</a>
+  </a>
+  <div class="mkt-nav-right">
+    <a href="/admin" class="btn btn-outline" style="font-size:0.82rem;padding:6px 13px">🛡️ Admin</a>
     <button class="btn btn-outline" onclick="openModal('loginModal')">Anmelden</button>
     <button class="btn btn-primary" onclick="openModal('registerModal')">Jetzt starten</button>
   </div>
 </nav>
 
-<!-- ══ HERO ═══════════════════════════════════════════════════════════════════ -->
-<section class="land-hero">
-  <div class="land-hero-bg" style="background-image:url('/static/assets/img/storyweaver.png')"></div>
-  <div class="land-hero-content">
-    <div class="land-tagline">Vollständig lokal · Offline-fähig · Powered by Ollama</div>
-    <h1 class="land-title">Deine Geschichte.<br/>Dein Game Master.</h1>
-    <p class="land-subtitle">
-      Storyweaver ist ein KI-gestütztes Textadventure, das vollständig auf deinem Rechner läuft.
-      Ein lokales Sprachmodell schlüpft in die Rolle eines meisterhaften Game Masters —
-      kein Server, keine Cloud, keine Grenzen.
-    </p>
-    <div class="land-cta">
-      <button class="btn btn-primary btn-xl" onclick="openModal('registerModal')">
-        🎮 Abenteuer beginnen
-      </button>
-      <button class="btn btn-outline btn-xl" onclick="openModal('loginModal')">
-        Bereits registriert?
-      </button>
+<!-- ══ HERO: SLIDESHOW ════════════════════════════════════════════════════════
+     Neue Genres: .mkt-slide anhängen + .mkt-dot ergänzen + nth-child CSS
+════════════════════════════════════════════════════════════════════════════ -->
+<section class="mkt-hero" id="hero" data-section="hero">
+  <div class="mkt-slides">
+    <div class="mkt-slide active">
+      <div class="mkt-slide-bg"></div>
+      <div class="mkt-slide-quote">
+        <span class="mkt-slide-genre">Dunkle Fantasy</span>
+        <p class="mkt-slide-text">„Du stehst vor einem Symbol, das niemand<br/>mehr entziffern kann. Niemand außer dem Wesen,<br/>das im Dunkeln atmet."</p>
+      </div>
     </div>
-    <div class="land-hero-stats">
-      <div class="land-stat"><span class="land-stat-num">∞</span><span>Geschichten</span></div>
-      <div class="land-stat"><span class="land-stat-num">100%</span><span>Offline</span></div>
-      <div class="land-stat"><span class="land-stat-num">0€</span><span>Kosten</span></div>
+    <div class="mkt-slide">
+      <div class="mkt-slide-bg"></div>
+      <div class="mkt-slide-quote">
+        <span class="mkt-slide-genre">Post-Apokalypse</span>
+        <p class="mkt-slide-text">„Drei Tage Laufen. Der Geigerzähler piept langsamer.<br/>Vielleicht ist die Zone hier passierbar.<br/>Vielleicht."</p>
+      </div>
     </div>
-  </div>
-  <div class="land-hero-scroll">↓ Mehr erfahren</div>
-</section>
-
-<!-- ══ FEATURES ════════════════════════════════════════════════════════════════ -->
-<section class="land-section land-features">
-  <div class="land-section-inner">
-    <h2 class="land-section-title">Was macht Storyweaver besonders?</h2>
-    <p class="land-section-sub">Ein vollständiges Rollenspiel-Erlebnis — vollständig auf deinem Rechner.</p>
-    <div class="land-feature-grid">
-      <div class="land-feature-card">
-        <div class="land-feature-icon">🧠</div>
-        <h3>KI Game Master</h3>
-        <p>Ein lokales Sprachmodell (via Ollama) leitet dein Abenteuer. Der Game Master merkt sich Ereignisse, entwickelt die Welt und reagiert auf deine Entscheidungen.</p>
+    <div class="mkt-slide">
+      <div class="mkt-slide-bg"></div>
+      <div class="mkt-slide-quote">
+        <span class="mkt-slide-genre">Thriller · Heist</span>
+        <p class="mkt-slide-text">„Das Schloss klickt.<br/>Du hast dreißig Sekunden,<br/>bevor die Wachen zurückkommen."</p>
       </div>
-      <div class="land-feature-card">
-        <div class="land-feature-icon">🌍</div>
-        <h3>Eigene Welten</h3>
-        <p>Erstelle Fantasy-Königreiche, düstere Science-Fiction-Dystopien oder historische Abenteuer. Definiere Welt, Atmosphäre, Geschichte und Spielregeln selbst.</p>
-      </div>
-      <div class="land-feature-card">
-        <div class="land-feature-icon">👤</div>
-        <h3>Lebendige Charaktere</h3>
-        <p>Gib deinen Figuren echte Persönlichkeiten: Alter, körperliche Merkmale, Kleidung, Vorlieben, Abneigungen, Superkräfte — und Beziehungen zueinander.</p>
-      </div>
-      <div class="land-feature-card">
-        <div class="land-feature-icon">📖</div>
-        <h3>Episches Storytelling</h3>
-        <p>Jede Geschichte ist einzigartig. Der Game Master passt Stil, Detailgrad und Ton deinen Vorgaben an — von schlichten Beschreibungen bis zu literarischer Prosa.</p>
-      </div>
-      <div class="land-feature-card">
-        <div class="land-feature-icon">⚙️</div>
-        <h3>Volle Kontrolle</h3>
-        <p>Definiere verbotene Phrasen, Wort-Alternativen, Stilbeispiele und Spielregeln. Steuere Temperature, Top-P und Repeat Penalty des Sprachmodells präzise.</p>
-      </div>
-      <div class="land-feature-card">
-        <div class="land-feature-icon">🔒</div>
-        <h3>100% Privat & Offline</h3>
-        <p>Keine Daten verlassen deinen Rechner. Keine Cloud, keine Abonnements, keine Limits. Deine Geschichten gehören dir — für immer und komplett offline.</p>
+    </div>
+    <div class="mkt-slide">
+      <div class="mkt-slide-bg"></div>
+      <div class="mkt-slide-quote">
+        <span class="mkt-slide-genre">Science Fiction</span>
+        <p class="mkt-slide-text">„Die Schiffs-KI kennt dich nicht.<br/>Aber sie lässt dich durch.<br/>Warum?"</p>
       </div>
     </div>
   </div>
+  <div class="mkt-hero-fg">
+    <h1 class="mkt-hero-title">Deine Geschichte.<br/><em>Dein Game Master.</em></h1>
+    <p class="mkt-hero-sub">Ein lokales Sprachmodell übernimmt die Regie. Unendlich viele Welten — vollständig auf deinem Rechner, ohne Cloud und ohne Grenzen.</p>
+    <div class="mkt-hero-cta">
+      <button class="btn btn-primary btn-xl" onclick="openModal('registerModal')">Abenteuer beginnen</button>
+      <button class="btn btn-outline btn-xl" onclick="openModal('loginModal')">Anmelden</button>
+    </div>
+  </div>
+  <div class="mkt-dots" id="slideDots">
+    <div class="mkt-dot active" onclick="goToSlide(0)"></div>
+    <div class="mkt-dot" onclick="goToSlide(1)"></div>
+    <div class="mkt-dot" onclick="goToSlide(2)"></div>
+    <div class="mkt-dot" onclick="goToSlide(3)"></div>
+  </div>
 </section>
 
-<!-- ══ HOW IT WORKS ══════════════════════════════════════════════════════════ -->
-<section class="land-section land-howto">
-  <div class="land-section-inner">
-    <h2 class="land-section-title">So funktioniert es</h2>
-    <div class="land-steps">
-      <div class="land-step">
-        <div class="land-step-num">1</div>
-        <div class="land-step-content">
-          <h3>Account erstellen</h3>
-          <p>Registriere dich mit einem Benutzernamen und Passwort. Alles bleibt lokal auf deinem Rechner — keine E-Mail nötig.</p>
+<!-- ══ PULSE TICKER ══════════════════════════════════════════════════════════ -->
+<div class="mkt-pulse" aria-hidden="true">
+  <div class="mkt-pulse-track">
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Der Schlüssel liegt in der zweiten Schublade links vom Eingang</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Ein Stolperdraht quer durch den Korridor — unsichtbar im Halbdunkel</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Zugangscode 4817 — eingeritzt in den Beton hinter dem Regal</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Mara trägt die Waffe, aber nicht das Vertrauen</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Der Reaktor hat noch vierzig Minuten</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Hinter der verschlossenen Tür: Stimmen. Oder Wind. Oder beides.</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Die Karte lügt. Das wusstest du, als du aufgebrochen bist.</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Verseuchter Korridor — Abschnitt C-7. Atemschutz nötig.</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Der Schlüssel liegt in der zweiten Schublade links vom Eingang</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Ein Stolperdraht quer durch den Korridor — unsichtbar im Halbdunkel</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Zugangscode 4817 — eingeritzt in den Beton hinter dem Regal</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Mara trägt die Waffe, aber nicht das Vertrauen</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Der Reaktor hat noch vierzig Minuten</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Hinter der verschlossenen Tür: Stimmen. Oder Wind. Oder beides.</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Die Karte lügt. Das wusstest du, als du aufgebrochen bist.</span>
+    <span class="mkt-pulse-item"><span class="mkt-pulse-sep"></span>Verseuchter Korridor — Abschnitt C-7. Atemschutz nötig.</span>
+  </div>
+</div>
+
+<!-- ══ SECTION: DER GAME MASTER ══════════════════════════════════════════════
+     Layout: Text links · Story-Terminal rechts
+════════════════════════════════════════════════════════════════════════════ -->
+<section class="mkt-gm" id="gm" data-section="gm">
+  <div class="mkt-gm-left">
+    <div class="mkt-eyebrow">KI Game Master</div>
+    <h2 class="mkt-h">Ein Erzähler,<br/>der sich erinnert.</h2>
+    <p class="mkt-p">Storyweaver nutzt ein lokales Sprachmodell (via Ollama), das nach jeder Szene Weltzustand, Charaktere und vergangene Ereignisse im Gedächtnis behält. Entscheidungen haben Konsequenzen. Fakten bleiben Fakten.</p>
+    <p class="mkt-p">Kein generisches Storytelling. Sprache, Stil, Ton, verbotene Phrasen — deine Vorgaben formen jeden Satz. Der Game Master schreibt für <em style="font-style:normal;color:var(--text-prim)">deine</em> Welt.</p>
+  </div>
+  <div class="mkt-gm-right">
+    <div class="mkt-terminal">
+      <div class="mkt-term-bar">
+        <div class="mkt-term-dot"></div><div class="mkt-term-dot"></div><div class="mkt-term-dot"></div>
+        <div class="mkt-term-title">Storyweaver · Szene 14</div>
+      </div>
+      <div class="mkt-term-body">
+        <div class="mkt-term-scene">Korridor C · Forschungsstation Aurora</div>
+        <div class="mkt-term-story">
+          Die Notbeleuchtung taucht den Flur in pulsierendes Rot. Du riechst Asche —
+          und etwas anderes, das du nicht benennen willst. Vor dir eine verschlossene
+          Sicherheitstür, dahinter <em>Stimmen</em>, oder vielleicht nur das Pfeifen
+          des Windes durch kaputte Entlüftungsschächte.<br/><br/>
+          Der Geigerzähler an deiner Hüfte beginnt leise zu ticken.
+        </div>
+        <div class="mkt-term-line"></div>
+        <div class="mkt-term-options">
+          <div class="mkt-term-opt"><span class="mkt-term-opt-num">1</span>Untersuche die Sicherheitstür auf Schwachstellen</div>
+          <div class="mkt-term-opt"><span class="mkt-term-opt-num">2</span>Folge den Stimmen durch den Westflügel</div>
+          <div class="mkt-term-opt"><span class="mkt-term-opt-num">3</span>Durchsuche den umgekippten Werkzeugwagen links</div>
         </div>
       </div>
-      <div class="land-step-arrow">→</div>
-      <div class="land-step">
-        <div class="land-step-num">2</div>
-        <div class="land-step-content">
-          <h3>Geschichte erstellen</h3>
-          <p>Gib deiner Welt einen Namen, wähle das Genre und füge Charaktere mit ihren einzigartigen Eigenschaften hinzu.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ SECTION: WELTZUSTAND ══════════════════════════════════════════════════
+     Layout: Zentrierter Kopf · 3-spaltiges Panel-Grid
+     Panels: Gegenstände | Zugangscodes | Hindernisse & Fallen
+════════════════════════════════════════════════════════════════════════════ -->
+<section class="mkt-world" id="worldstate" data-section="worldstate">
+  <div class="mkt-world-head">
+    <div class="mkt-eyebrow center">Lebendige Welt</div>
+    <h2 class="mkt-h" style="text-align:center">Die KI weiß,<br/>was du weißt.</h2>
+    <p class="mkt-p" style="text-align:center;max-width:520px;margin:0 auto;font-size:15px">Nach jeder Szene extrahiert Storyweaver automatisch alle relevanten Gegenstände, Zugangscodes und Hindernisse aus dem Story-Text — und zeigt sie übersichtlich an.</p>
+  </div>
+  <div class="mkt-world-panels">
+    <div class="mkt-world-panel">
+      <div class="mkt-world-panel-head"><span class="icon">📦</span> Gegenstände</div>
+      <div class="mkt-wi"><span class="mkt-wi-icon">📦</span><div><span class="mkt-wi-name">Rostiger Schlüssel</span><span class="mkt-wi-meta">Keller · zweite Schublade links</span></div></div>
+      <div class="mkt-wi"><span class="mkt-wi-icon">✋</span><div><span class="mkt-wi-name">Schallgedämpfte Pistole</span><span class="mkt-wi-meta">bei Mara</span></div></div>
+      <div class="mkt-wi" style="opacity:.45"><span class="mkt-wi-icon">✅</span><div><span class="mkt-wi-name clr-done">Verbandskasten</span><span class="mkt-wi-meta">verbraucht</span></div></div>
+    </div>
+    <div class="mkt-world-panel">
+      <div class="mkt-world-panel-head"><span class="icon">🔑</span> Zugangscodes</div>
+      <div class="mkt-wi"><span class="mkt-wi-icon">🔒</span><div><span class="mkt-wi-name clr-lock">Unbekannter Code</span><span class="mkt-wi-meta">suche: Notizbuch des Wächters</span></div></div>
+      <div class="mkt-wi"><span class="mkt-wi-icon">🔑</span><div><span class="mkt-wi-name clr-code">4817</span><span class="mkt-wi-meta">Wandtresor · für: Nordtür</span></div></div>
+      <div class="mkt-wi" style="opacity:.45"><span class="mkt-wi-icon">✅</span><div><span class="mkt-wi-name clr-done">Terminal-Passwort</span><span class="mkt-wi-meta">Code verwendet</span></div></div>
+    </div>
+    <div class="mkt-world-panel">
+      <div class="mkt-world-panel-head"><span class="icon">⚠️</span> Hindernisse &amp; Fallen</div>
+      <div class="mkt-wi"><span class="mkt-wi-icon">🔴</span><div><span class="mkt-wi-name clr-obs">Verseuchter Korridor</span><span class="mkt-wi-meta">Abschnitt C-7 · ↳ Atemschutz nötig</span></div></div>
+      <div class="mkt-wi"><span class="mkt-wi-icon">💥</span><div><span class="mkt-wi-name clr-trig">Stolperfalle</span><span class="mkt-wi-meta">ausgelöst — Alarm aktiv</span></div></div>
+      <div class="mkt-wi" style="opacity:.45"><span class="mkt-wi-icon">✅</span><div><span class="mkt-wi-name clr-done">Bewachter Durchgang</span><span class="mkt-wi-meta">überwunden</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ SECTION: CHARAKTERE ═══════════════════════════════════════════════════
+     Layout: Charakter-Karte links · Feature-Text rechts
+════════════════════════════════════════════════════════════════════════════ -->
+<section class="mkt-chars" id="characters" data-section="characters">
+  <div class="mkt-chars-left">
+    <div class="mkt-char-card">
+      <div class="mkt-char-top">
+        <div class="mkt-char-avatar">👤</div>
+        <div>
+          <div class="mkt-char-name">Mara Voss</div>
+          <div class="mkt-char-role">Ex-Schmugglerpilotin · Spielercharakter</div>
         </div>
       </div>
-      <div class="land-step-arrow">→</div>
-      <div class="land-step">
-        <div class="land-step-num">3</div>
-        <div class="land-step-content">
-          <h3>Abenteuer erleben</h3>
-          <p>Der KI Game Master schreibt deine Geschichte. Triff Entscheidungen, forme deine Welt — jede Konsequenz ist permanent.</p>
+      <div class="mkt-char-body">
+        <div class="mkt-char-row"><span class="mkt-char-label">Alter</span><span class="mkt-char-val">34</span></div>
+        <div class="mkt-char-row"><span class="mkt-char-label">Äußeres</span><span class="mkt-char-val">Schulterwunde, militärische Haltung</span></div>
+        <div class="mkt-char-row"><span class="mkt-char-label">Persönlichkeit</span><span class="mkt-char-val">Misstrauisch, pragmatisch, loyal</span></div>
+        <div class="mkt-char-row"><span class="mkt-char-label">Motivation</span><span class="mkt-char-val">Findet ihren verschwundenen Bruder</span></div>
+        <div class="mkt-char-row"><span class="mkt-char-label">Avatar</span><span class="mkt-char-val" style="color:var(--accent)">🖼️ Bild hochgeladen</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="mkt-chars-right">
+    <div class="mkt-eyebrow">Charaktersystem</div>
+    <h2 class="mkt-h">Figuren, die<br/>wirklich existieren.</h2>
+    <p class="mkt-p">Jeder Charakter ist ein vollständiges Profil. Der Game Master kennt ihre Persönlichkeit, ihre Vergangenheit, ihre Beziehungen — und verhält sich entsprechend.</p>
+    <ul class="mkt-feat-list">
+      <li>Alter, Aussehen, Kleidung, Persönlichkeit, Motivationen frei definierbar</li>
+      <li>Eigener Avatar per Bildupload (PNG, JPG, WebP)</li>
+      <li>Charakter-Export als JSON — kompatibel mit ChatGPT Custom GPTs</li>
+      <li>Beziehungen zwischen Charakteren beeinflussen die Geschichte</li>
+      <li>Beliebig viele Charaktere und Nebenrollen pro Story</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══ SECTION: KONTROLLE ════════════════════════════════════════════════════
+     Layout: Zentrierter Kopf · Full-width Control-Strip
+     Neue Einstellung = neues .mkt-ctrl im Strip ergänzen
+════════════════════════════════════════════════════════════════════════════ -->
+<section class="mkt-control" id="control" data-section="control">
+  <div class="mkt-control-head">
+    <div class="mkt-eyebrow center">Vollständige Kontrolle</div>
+    <h2 class="mkt-h" style="text-align:center">Dein Spiel. Deine Regeln.</h2>
+  </div>
+  <div class="mkt-ctrl-strip">
+    <div class="mkt-ctrl">
+      <div class="mkt-ctrl-icon">🌡️</div>
+      <div class="mkt-ctrl-name">Temperatur</div>
+      <div class="mkt-ctrl-desc">Von präzise bis kreativ — steuere die Vorhersagbarkeit des Modells.</div>
+      <div class="mkt-ctrl-tag">0.1 – 1.5</div>
+    </div>
+    <div class="mkt-ctrl">
+      <div class="mkt-ctrl-icon">🌐</div>
+      <div class="mkt-ctrl-name">Ausgabesprache</div>
+      <div class="mkt-ctrl-desc">Deutsch, Englisch, Französisch — die KI schreibt in deiner Sprache.</div>
+      <div class="mkt-ctrl-tag">Frei wählbar</div>
+    </div>
+    <div class="mkt-ctrl">
+      <div class="mkt-ctrl-icon">📏</div>
+      <div class="mkt-ctrl-name">Detailgrad</div>
+      <div class="mkt-ctrl-desc">Knappe Szenen oder literarische Prosa — du bestimmst den Umfang.</div>
+      <div class="mkt-ctrl-tag">Niedrig · Mittel · Hoch</div>
+    </div>
+    <div class="mkt-ctrl">
+      <div class="mkt-ctrl-icon">✒️</div>
+      <div class="mkt-ctrl-name">Schreibstil</div>
+      <div class="mkt-ctrl-desc">Verbotene Phrasen, Stil-Vorlagen, Wort-Alternativen, Beispieltexte.</div>
+      <div class="mkt-ctrl-tag">Vollständig anpassbar</div>
+    </div>
+    <div class="mkt-ctrl">
+      <div class="mkt-ctrl-icon">🤖</div>
+      <div class="mkt-ctrl-name">Modell</div>
+      <div class="mkt-ctrl-desc">Jedes Ollama-Modell — von phi4 bis llama3:70b, wechselbar per Klick.</div>
+      <div class="mkt-ctrl-tag">Ollama-kompatibel</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ SECTION: SETUP ════════════════════════════════════════════════════════
+     Layout: Nummerierte Schritte, terminal-ästhetisch
+════════════════════════════════════════════════════════════════════════════ -->
+<section class="mkt-setup" id="setup" data-section="setup">
+  <div class="mkt-setup-wrap">
+    <div class="mkt-eyebrow">In drei Schritten</div>
+    <h2 class="mkt-h">Bereit in Minuten.</h2>
+    <div class="mkt-steps">
+      <div class="mkt-step">
+        <div class="mkt-step-num">1</div>
+        <div class="mkt-step-body">
+          <h3>Ollama installieren &amp; Modell laden</h3>
+          <p>Lade Ollama herunter, starte es und lade ein Sprachmodell. Einmalig, kostenlos, vollständig lokal.</p>
+          <div class="mkt-codes">
+            <div class="mkt-code"><span class="mkt-code-prompt">$</span> ollama serve</div>
+            <div class="mkt-code"><span class="mkt-code-prompt">$</span> ollama pull llama3</div>
+          </div>
+        </div>
+      </div>
+      <div class="mkt-step">
+        <div class="mkt-step-num">2</div>
+        <div class="mkt-step-body">
+          <h3>Storyweaver klonen &amp; starten</h3>
+          <p>Repository klonen und starten. Unter Windows reicht ein Doppelklick auf <code style="color:var(--accent);background:var(--bg-deep);padding:1px 6px;border-radius:4px;border:1px solid var(--border);font-size:12px">start.bat</code>.</p>
+          <div class="mkt-codes">
+            <div class="mkt-code"><span class="mkt-code-prompt">$</span> git clone https://github.com/AmFearLiath/storyweaver</div>
+          </div>
+        </div>
+      </div>
+      <div class="mkt-step">
+        <div class="mkt-step-num">3</div>
+        <div class="mkt-step-body">
+          <h3>Browser öffnen &amp; spielen</h3>
+          <p>Account erstellen, erste Geschichte anlegen, Charaktere definieren — und das Abenteuer beginnt.</p>
+          <div class="mkt-code"><span class="mkt-code-prompt">→</span>&nbsp;http://localhost:8000</div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ══ REQUIREMENTS ══════════════════════════════════════════════════════════ -->
-<section class="land-section land-requirements">
-  <div class="land-section-inner">
-    <h2 class="land-section-title">Voraussetzungen</h2>
-    <div class="land-req-grid">
-      <div class="land-req-card">
-        <div class="land-req-icon">🦙</div>
-        <h3>Ollama</h3>
-        <p>Installiere Ollama und lade ein Sprachmodell herunter (z.B. <code>ollama pull llama3</code>). Kostenlos, lokal, schnell.</p>
-      </div>
-      <div class="land-req-card">
-        <div class="land-req-icon">🐍</div>
-        <h3>Python 3.10+</h3>
-        <p>FastAPI als Backend. Starte das Spiel einfach mit <code>start.bat</code> oder <code>python run.py</code>.</p>
-      </div>
-      <div class="land-req-card">
-        <div class="land-req-icon">🌐</div>
-        <h3>Browser</h3>
-        <p>Kein zusätzliches Frontend-Framework. Öffne einfach <code>http://localhost:8000</code> im Browser.</p>
-      </div>
-    </div>
-  </div>
-</section>
+<!-- ══ NEUE SECTIONS HIER EINFÜGEN ══════════════════════════════════════════ -->
 
-<!-- ══ CTA SECTION ════════════════════════════════════════════════════════════ -->
-<section class="land-final-cta">
-  <div class="land-section-inner" style="text-align:center">
-    <h2>Bereit für dein Abenteuer?</h2>
-    <p style="color:var(--text-sec);margin:14px 0 30px">Erstelle deinen Account und beginne deine erste Geschichte mit Storyweaver.</p>
-    <button class="btn btn-primary btn-xl" onclick="openModal('registerModal')">
-      🎮 Jetzt registrieren — kostenlos
-    </button>
+<!-- ══ SECTION: FINALE CTA ═══════════════════════════════════════════════════ -->
+<section class="mkt-cta" id="cta" data-section="cta">
+  <div class="mkt-cta-bg"></div>
+  <div class="mkt-cta-veil"></div>
+  <div class="mkt-cta-body">
+    <h2>Schreib deine<br/><em>erste Szene.</em></h2>
+    <p>Keine Cloud. Keine Kosten. Keine Grenzen.<br/>Nur du, ein lokales Modell und die Geschichte, die du erzählen willst.</p>
+    <button class="btn btn-primary btn-xl" onclick="openModal('registerModal')">Jetzt registrieren — kostenlos</button>
+    <div class="mkt-badges">
+      <span class="mkt-badge">100% offline</span>
+      <span class="mkt-badge">Keine Cloud</span>
+      <span class="mkt-badge">Keine Kosten</span>
+      <span class="mkt-badge">Open Source</span>
+    </div>
   </div>
 </section>
 
 <!-- ══ FOOTER ════════════════════════════════════════════════════════════════ -->
-<footer class="land-footer">
-  <span class="land-logo" style="font-size:15px">
-    <img src="/static/assets/img/logo.png" alt="Storyweaver" class="land-logo-img" style="height:20px;vertical-align:middle;margin-right:6px" />
+<footer class="mkt-footer">
+  <div class="mkt-footer-logo">
+    <img src="/static/assets/img/logo.png" alt="Storyweaver" />
     Storyweaver
-  </span>
-  <span style="color:var(--text-dim)">Vollständig lokal &amp; offline · Powered by Ollama &amp; FastAPI</span>
+  </div>
+  <span>Vollständig lokal &amp; offline · Powered by Ollama &amp; FastAPI</span>
+  <a href="https://github.com/AmFearLiath/storyweaver" target="_blank" rel="noopener">GitHub →</a>
 </footer>
+
+
 
 <!-- ══════════════════════════════════════════════════════════════════════════
      MODAL: REGISTRIERUNG
@@ -226,6 +679,28 @@
 <div id="toast" class="toast hidden"></div>
 
 <script>
+// ── Slideshow ──────────────────────────────────────────────────────────────
+let currentSlide = 0;
+const slides = document.querySelectorAll('.mkt-slide');
+const dots   = document.querySelectorAll('.mkt-dot');
+function goToSlide(n) {
+  if (!slides.length) return;
+  slides[currentSlide].classList.remove('active');
+  dots[currentSlide].classList.remove('active');
+  currentSlide = n;
+  slides[currentSlide].classList.add('active');
+  dots[currentSlide].classList.add('active');
+}
+if (slides.length) setInterval(() => goToSlide((currentSlide + 1) % slides.length), 6000);
+
+// ── Nav scroll effect ──────────────────────────────────────────────────────
+const mktNav = document.getElementById('mktNav');
+if (mktNav) {
+  window.addEventListener('scroll', () => {
+    mktNav.classList.toggle('scrolled', window.scrollY > 40);
+  });
+}
+
 // ── Check if already logged in ─────────────────────────────────────────────
 (async function() {
   const token = localStorage.getItem('token');
