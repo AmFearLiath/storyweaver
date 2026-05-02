@@ -67,6 +67,16 @@ async function init() {
   const fi = document.getElementById('freeInput');
   if (fi) fi.addEventListener('keydown', e => { if (e.key === 'Enter') submitFreeAction(); });
 
+  // Keyboard shortcuts [1]–[6] for options
+  document.addEventListener('keydown', e => {
+    if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+    const n = parseInt(e.key);
+    if (n >= 1 && n <= 6 && !state.isProcessing) {
+      const btn = document.querySelector(`.option-btn[data-opt-index="${n - 1}"]`);
+      if (btn && !btn.disabled) btn.click();
+    }
+  });
+
   // Close user dropdown on outside click
   document.addEventListener('click', e => {
     const dd = document.getElementById('userDropdown');
@@ -959,101 +969,86 @@ async function processAction(action, isCustom) {
 // ── World Items ───────────────────────────────────────────────────────────────
 function renderWorldItems(items) {
   state.worldItems = items || [];
-  const panel = document.getElementById('worldItemsPanel');
-  const list  = document.getElementById('worldItemsList');
-  if (!panel || !list) return;
-
-  if (!state.worldItems.length) {
-    panel.style.display = 'none';
-    return;
-  }
-
-  panel.style.display = '';
-  const statusOrder = { triggered: 0, active: 1, available: 2, held: 3, used: 4, overcome: 5, avoided: 5, unknown: 2, found: 2 };
-  const sorted = [...state.worldItems].sort(
-    (a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3)
-  );
-
-  list.innerHTML = sorted.map(item => {
-    const status = item.status || 'available';
-    const itype  = item.type  || 'item';
-    let icon, cls, meta;
-
-    if (itype === 'code') {
-      // Code-type items: unknown / found / used
-      if (status === 'used') {
-        icon = '✅'; cls = 'wi-used';
-        meta = `<span class="wi-meta">Code verwendet</span>`;
-      } else if (status === 'found') {
-        icon = '🔑'; cls = 'wi-code-found';
-        const copyBtn = `<span class="wi-code-value" title="In Aktion einfügen" onclick="insertCode('${esc(item.code_value || '')}')">${esc(item.code_value || '???')}</span>`;
-        meta = `${copyBtn}${item.required_for ? `<span class="wi-meta">für: ${esc(item.required_for)}</span>` : ''}`;
-      } else {
-        // unknown
-        icon = '🔒'; cls = 'wi-code-unknown';
-        meta = item.location
-          ? `<span class="wi-meta wi-loc">suche: ${esc(item.location)}</span>`
-          : `<span class="wi-meta">noch nicht gefunden</span>`;
-      }
-    } else if (itype === 'obstacle') {
-      // Obstacles: active / triggered / overcome / avoided
-      const DANGER_ICON = { low: '⚠️', medium: '🔶', high: '🔴', lethal: '☠️' };
-      const danger = item.danger_level || 'medium';
-      icon = DANGER_ICON[danger] || '⚠️';
-      if (status === 'overcome') {
-        cls = 'wi-obstacle-overcome';
-        meta = `<span class="wi-meta">✅ überwunden</span>`;
-      } else if (status === 'avoided') {
-        cls = 'wi-obstacle-avoided';
-        meta = `<span class="wi-meta">↩️ umgangen</span>`;
-      } else if (status === 'triggered') {
-        cls = 'wi-obstacle-triggered';
-        meta = `<span class="wi-meta wi-loc">💥 ausgelöst${item.location ? ' @ ' + esc(item.location) : ''}</span>`
-             + (item.required_for ? `<span class="wi-meta">↳ ${esc(item.required_for)}</span>` : '');
-      } else {
-        // active
-        cls = 'wi-obstacle-active';
-        meta = (item.location ? `<span class="wi-meta wi-loc">${esc(item.location)}</span>` : '')
-             + (item.required_for ? `<span class="wi-meta">↳ ${esc(item.required_for)}</span>` : '');
-      }
-    } else {
-      // Regular physical item
-      if (status === 'used') {
-        icon = '✅'; cls = 'wi-used';
-        meta = '<span class="wi-meta">verbraucht</span>';
-      } else if (status === 'held') {
-        icon = '✋'; cls = 'wi-held';
-        meta = `<span class="wi-meta">bei ${esc(item.held_by || '?')}</span>`;
-      } else {
-        icon = '📦'; cls = 'wi-available';
-        meta = item.location ? `<span class="wi-meta wi-loc">${esc(item.location)}</span>` : '';
-      }
-    }
-
-    const tipParts = [item.description, item.required_for ? 'Benötigt für: ' + item.required_for : ''].filter(Boolean);
-    const tip = tipParts.join(' | ');
-    return `<div class="world-item ${cls}" title="${esc(tip)}">
-      <span class="wi-icon">${icon}</span>
-      <div class="wi-body">
-        <span class="wi-name">${esc(item.name)}</span>
-        ${meta}
-      </div>
-    </div>`;
-  }).join('');
+  const emptyEl       = document.getElementById('sidebarRightEmpty');
+  const itemItems     = state.worldItems.filter(i => (i.type || 'item') === 'item');
+  const codeItems     = state.worldItems.filter(i => i.type === 'code');
+  const obstacleItems = state.worldItems.filter(i => i.type === 'obstacle');
+  _renderWorldPanel('rightItemsPanel',     'rightItemsList',     itemItems);
+  _renderWorldPanel('rightCodesPanel',     'rightCodesList',     codeItems);
+  _renderWorldPanel('rightObstaclesPanel', 'rightObstaclesList', obstacleItems);
+  if (emptyEl) emptyEl.style.display = state.worldItems.length ? 'none' : '';
 }
 
-function toggleWorldItems() {
-  const list = document.getElementById('worldItemsList');
-  const chev = document.getElementById('worldItemsChevron');
-  if (!list) return;
-  const hidden = list.style.display === 'none';
-  list.style.display = hidden ? '' : 'none';
-  if (chev) chev.textContent = hidden ? '▾' : '▸';
+function _buildItemHtml(item) {
+  const status = item.status || 'available';
+  const itype  = item.type   || 'item';
+  let icon, cls, meta;
+  if (itype === 'code') {
+    if (status === 'used') {
+      icon = '✅'; cls = 'wi-used';
+      meta = `<span class="wi-meta">Code verwendet</span>`;
+    } else if (status === 'found') {
+      icon = '🔑'; cls = 'wi-code-found';
+      const copyBtn = `<span class="wi-code-value" title="In Aktion einfügen" onclick="insertCode('${esc(item.code_value || '')}')">${esc(item.code_value || '???')}</span>`;
+      meta = `${copyBtn}${item.required_for ? `<span class="wi-meta">für: ${esc(item.required_for)}</span>` : ''}`;
+    } else {
+      icon = '🔒'; cls = 'wi-code-unknown';
+      meta = item.location
+        ? `<span class="wi-meta wi-loc">suche: ${esc(item.location)}</span>`
+        : `<span class="wi-meta">noch nicht gefunden</span>`;
+    }
+  } else if (itype === 'obstacle') {
+    const DANGER_ICON = { low: '⚠️', medium: '🔶', high: '🔴', lethal: '☠️' };
+    const danger = item.danger_level || 'medium';
+    icon = DANGER_ICON[danger] || '⚠️';
+    if (status === 'overcome') {
+      cls = 'wi-obstacle-overcome';
+      meta = `<span class="wi-meta">✅ überwunden</span>`;
+    } else if (status === 'avoided') {
+      cls = 'wi-obstacle-avoided';
+      meta = `<span class="wi-meta">↩️ umgangen</span>`;
+    } else if (status === 'triggered') {
+      cls = 'wi-obstacle-triggered';
+      meta = `<span class="wi-meta wi-loc">💥 ausgelöst${item.location ? ' @ ' + esc(item.location) : ''}</span>`
+           + (item.required_for ? `<span class="wi-meta">↳ ${esc(item.required_for)}</span>` : '');
+    } else {
+      cls = 'wi-obstacle-active';
+      meta = (item.location ? `<span class="wi-meta wi-loc">${esc(item.location)}</span>` : '')
+           + (item.required_for ? `<span class="wi-meta">↳ ${esc(item.required_for)}</span>` : '');
+    }
+  } else {
+    if (status === 'used') {
+      icon = '✅'; cls = 'wi-used';
+      meta = '<span class="wi-meta">verbraucht</span>';
+    } else if (status === 'held') {
+      icon = '✋'; cls = 'wi-held';
+      meta = `<span class="wi-meta">bei ${esc(item.held_by || '?')}</span>`;
+    } else {
+      icon = '📦'; cls = 'wi-available';
+      meta = item.location ? `<span class="wi-meta wi-loc">${esc(item.location)}</span>` : '';
+    }
+  }
+  const tip = [item.description, item.required_for ? 'Benötigt für: ' + item.required_for : ''].filter(Boolean).join(' | ');
+  return `<div class="world-item ${cls}" title="${esc(tip)}">
+    <span class="wi-icon">${icon}</span>
+    <div class="wi-body"><span class="wi-name">${esc(item.name)}</span>${meta}</div>
+  </div>`;
+}
+
+function _renderWorldPanel(panelId, listId, items) {
+  const panel = document.getElementById(panelId);
+  const list  = document.getElementById(listId);
+  if (!panel || !list) return;
+  if (!items.length) { panel.style.display = 'none'; list.innerHTML = ''; return; }
+  panel.style.display = '';
+  const order = { triggered: 0, active: 1, available: 2, held: 3, unknown: 2, found: 2, used: 4, overcome: 5, avoided: 5 };
+  const sorted = [...items].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+  list.innerHTML = sorted.map(_buildItemHtml).join('');
 }
 
 // Inserts a found code into the player action input field for easy use
 function insertCode(codeValue) {
-  const input = document.getElementById('playerAction');
+  const input = document.getElementById('freeInput');
   if (!input) return;
   const current = input.value.trim();
   input.value = current ? `${current} ${codeValue}` : codeValue;
@@ -1203,10 +1198,12 @@ function setOptions(options) {
   const btnContainer = document.getElementById('optionButtons');
   btnContainer.innerHTML = '';
   if (!Array.isArray(options)) return;
+  const keys = ['1','2','3','4','5','6'];
   options.slice(0, 6).forEach((opt, i) => {
     const btn = document.createElement('button');
     btn.className = 'option-btn';
-    btn.innerHTML = `<span class="option-number">Option ${i + 1}</span>${esc(opt)}`;
+    btn.dataset.optIndex = i;
+    btn.innerHTML = `<div class="option-btn-content"><span class="option-number">Option ${i + 1}</span>${esc(opt)}</div><span class="option-key">${keys[i]}</span>`;
     btn.onclick = () => chooseOption(opt);
     btnContainer.appendChild(btn);
   });
@@ -1355,6 +1352,29 @@ function setProcessing(val) {
   if (freeBtn)  freeBtn.disabled = val;
   if (startBtn) startBtn.disabled = val;
   document.querySelectorAll('.option-btn').forEach(b => b.disabled = val);
+  setGmStatus(val ? 'thinking' : 'done');
+}
+
+function setGmStatus(status) {
+  // status: 'idle' | 'thinking' | 'done'
+  const bar   = document.getElementById('gmStatusBar');
+  const text  = document.getElementById('gmStatusText');
+  const pulse = document.getElementById('gmPulse');
+  if (bar)   bar.dataset.status = status;
+  if (pulse) {
+    pulse.classList.remove('active', 'done');
+    if (status === 'thinking') pulse.classList.add('active');
+    if (status === 'done')     pulse.classList.add('done');
+  }
+  if (text) {
+    if (status === 'thinking') text.textContent = 'Game Master schreibt…';
+    else if (status === 'done') text.textContent = 'Szene bereit';
+    else text.textContent = 'Bereit';
+  }
+  if (status === 'done') {
+    clearTimeout(setGmStatus._timer);
+    setGmStatus._timer = setTimeout(() => setGmStatus('idle'), 2200);
+  }
 }
 function showToast(msg, type = 'info') {
   const t = document.getElementById('toast');

@@ -20,6 +20,7 @@
       <span class="story-chevron">▾</span>
     </button>
     <span class="scene-badge" id="sceneBadge">Szene 0</span>
+    <div class="gm-pulse" id="gmPulse" title="Game Master Status"></div>
   </div>
   <div class="header-right">
     <div class="ollama-status">
@@ -56,13 +57,6 @@
       </div>
       <div id="characterList" class="character-list"></div>
     </section>
-    <section class="panel" id="worldItemsPanel" style="display:none">
-      <div class="panel-header" onclick="toggleWorldItems()" style="cursor:pointer" title="Ein-/ausklappen">
-        <h3 class="panel-title">🎒 Gegenstände</h3>
-        <span id="worldItemsChevron" style="font-size:11px;color:var(--text-dim)">▾</span>
-      </div>
-      <div id="worldItemsList" class="world-items-list"></div>
-    </section>
     <div class="sidebar-actions">
       <button class="btn btn-sidebar-action" onclick="openWorldModal()">🌍 Welt &amp; Regeln</button>
       <button class="btn btn-sidebar-action" onclick="openStyleModal()">✍️ Stil &amp; Sprache</button>
@@ -94,20 +88,54 @@
       </div>
     </div>
 
+    <!-- GM Status Bar — immer sichtbar -->
+    <div id="gmStatusBar" class="gm-status-bar" data-status="idle">
+      <div class="gm-status-inner">
+        <div class="gm-dots"><span></span><span></span><span></span></div>
+        <span id="gmStatusText" class="gm-status-text">Bereit</span>
+      </div>
+    </div>
+
     <!-- Options Panel -->
     <div id="optionsPanel" class="options-panel hidden">
-      <h4 class="options-title">🎯 Deine Entscheidung</h4>
+      <h4 class="options-title">Deine Entscheidung</h4>
       <div id="optionButtons" class="option-buttons"></div>
       <div class="free-input-section">
-        <div class="free-input-label">✍️ Eigene Aktion eingeben</div>
         <div class="free-input-row">
           <input type="text" id="freeInput" class="free-input"
-                 placeholder="Was tust du? Schreibe deine eigene Aktion..." />
+                 placeholder="Eigene Aktion eingeben..." />
           <button class="btn btn-primary" onclick="submitFreeAction()" id="freeActionBtn">→</button>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- ── RECHTE SIDEBAR ────────────────────────────────────────────────── -->
+  <aside class="sidebar sidebar-right">
+    <div class="sidebar-right-empty" id="sidebarRightEmpty">
+      <span>🌍</span>
+      <p>Weltgegenstände erscheinen<br/>während des Spiels</p>
+    </div>
+    <section class="panel" id="rightItemsPanel" style="display:none">
+      <div class="panel-header">
+        <h3 class="panel-title">📦 Gegenstände</h3>
+      </div>
+      <div id="rightItemsList" class="world-items-list"></div>
+    </section>
+    <section class="panel" id="rightCodesPanel" style="display:none">
+      <div class="panel-header">
+        <h3 class="panel-title">🔑 Zugangscodes</h3>
+      </div>
+      <div id="rightCodesList" class="world-items-list"></div>
+    </section>
+    <section class="panel" id="rightObstaclesPanel" style="display:none">
+      <div class="panel-header">
+        <h3 class="panel-title">⚠️ Hindernisse</h3>
+      </div>
+      <div id="rightObstaclesList" class="world-items-list"></div>
+    </section>
+  </aside>
+
 </main>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
