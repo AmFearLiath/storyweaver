@@ -1,53 +1,120 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   ADVENTURE — Vollständiges CSS · Dark Fantasy Theme
+   ADVENTURE — Vollständiges CSS · Dark Fantasy Theme · v2.1 polish
    ══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --bg-deep:      #0a0c12;
-  --bg-dark:      #0f1219;
-  --bg-card:      #151a24;
-  --bg-panel:     #1a2030;
-  --bg-hover:     #202840;
+  /* Backgrounds — weicher, nicht pures Schwarz */
+  --bg-deep:      #0c0f17;
+  --bg-dark:      #11151f;
+  --bg-card:      #171c28;
+  --bg-panel:     #1c2233;
+  --bg-hover:     #232b42;
   --border:       #2a3550;
   --border-glow:  #3a4f80;
+
+  /* Akzent — unverändert */
   --accent:       #c8a84b;
   --accent-dim:   #8a6e2a;
   --accent-glow:  rgba(200,168,75,0.15);
-  --danger:       #c84b4b;
-  --danger-dim:   rgba(200,75,75,0.12);
-  --success:      #4bc884;
-  --text-prim:    #e8e0d0;
-  --text-sec:     #8a9bb5;
-  --text-dim:     #5a6a85;
-  --story-text:   #d8cfc0;
-  --option-bg:    #141c2e;
-  --option-hover: #1e2a44;
+  --accent-soft:  rgba(200,168,75,0.08);
+
+  /* Status */
+  --danger:       #d65a5a;
+  --danger-dim:   rgba(214,90,90,0.12);
+  --success:      #5ad094;
+  --info:         #7ab3f0;
+
+  /* Text — erhöhter Kontrast */
+  --text-prim:    #ece4d4;
+  --text-sec:     #93a3bd;
+  --text-dim:     #607093;
+  --story-text:   #e0d7c8;
+
+  /* Options */
+  --option-bg:    #161e30;
+  --option-hover: #1f2b46;
   --scrollbar:    #2a3550;
 
+  /* Radii */
   --radius-sm: 6px;
   --radius:    10px;
   --radius-lg: 16px;
-  --shadow:    0 4px 24px rgba(0,0,0,0.6);
-  --shadow-glow: 0 0 20px rgba(200,168,75,0.08);
-  --font-story: 'Georgia', 'Times New Roman', serif;
-  --font-ui:    'Segoe UI', system-ui, sans-serif;
-  --transition: 0.18s ease;
+
+  /* Shadows */
+  --shadow:       0 4px 24px rgba(0,0,0,0.6);
+  --shadow-soft:  0 2px 12px rgba(0,0,0,0.35);
+  --shadow-glow:  0 0 20px rgba(200,168,75,0.08);
+  --shadow-focus: 0 0 0 3px rgba(200,168,75,0.32);
+
+  /* Spacing scale (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 48px;
+
+  /* Typography */
+  --font-story: 'Georgia', 'Iowan Old Style', 'Times New Roman', serif;
+  --font-ui:    'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Motion */
+  --transition:     0.18s ease;
+  --transition-med: 0.28s cubic-bezier(.4,.0,.2,1);
+  --transition-slow:0.45s cubic-bezier(.4,.0,.2,1);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
   height: 100%;
-  background: var(--bg-deep);
   color: var(--text-prim);
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 5px; }
+/* Sanfter atmosphärischer Hintergrund statt pures Schwarz */
+body {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(200,168,75,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 100%, rgba(122,179,240,0.025) 0%, transparent 60%),
+    var(--bg-deep);
+  background-attachment: fixed;
+}
+
+/* Globale Focus-Sichtbarkeit (Accessibility) */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+button:focus-visible,
+.option-btn:focus-visible,
+.btn-sidebar-action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Reduced motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-glow); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    LANDING PAGE
@@ -1215,4 +1282,269 @@ body:not(.landing-page) { overflow: hidden; }
   letter-spacing: 0.12em;
   color: var(--text-dim);
   margin-bottom: 8px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v2.1 POLISH — Story-Fokus, Game-like Choices, Charakter-Activity, Mobile
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Story Window: Reading-Width + Atmosphäre ──────────────────────────── */
+.story-container {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 0%, rgba(200,168,75,0.025) 0%, transparent 70%),
+    var(--bg-deep);
+}
+.story-window {
+  padding: var(--sp-7) var(--sp-6);
+  scroll-behavior: smooth;
+}
+.story-content { max-width: 680px; margin: 0 auto; }
+.story-text {
+  font-size: 16.5px;
+  line-height: 1.9;
+  letter-spacing: 0.005em;
+  color: var(--story-text);
+}
+/* Drop Cap am Anfang jeder neuen Szene — subtil, immersiv */
+.story-entry .story-text > p:first-child::first-letter,
+.story-entry .story-text:first-child::first-letter {
+  font-family: var(--font-story);
+  font-size: 3.2em;
+  font-weight: 700;
+  float: left;
+  line-height: 0.9;
+  margin: 0.05em 0.08em 0 0;
+  color: var(--accent);
+  text-shadow: 0 0 16px rgba(200,168,75,0.25);
+}
+
+/* Spieler-Aktion — als Karte mit Pfeil, gold-glühend */
+.story-player-action {
+  background: linear-gradient(135deg, rgba(200,168,75,0.18), rgba(200,168,75,0.06));
+  border: 1px solid var(--accent-dim);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: var(--sp-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  box-shadow: 0 0 12px rgba(200,168,75,0.08);
+}
+
+/* Story-Meta — leiser, nicht ablenkend */
+.story-meta {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-glow);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  margin-top: var(--sp-3);
+  font-size: 12px;
+  color: var(--text-sec);
+  line-height: 1.7;
+}
+
+/* ── Game-like Option Buttons ────────────────────────────────────────── */
+.options-panel {
+  padding: var(--sp-4) var(--sp-5);
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.25) 100%),
+    var(--bg-dark);
+}
+.option-buttons { gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.option-btn {
+  position: relative;
+  background: var(--option-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  cursor: pointer;
+  transition: transform var(--transition-med), border-color var(--transition), background var(--transition), box-shadow var(--transition);
+  overflow: hidden;
+  isolation: isolate;
+}
+/* Goldener Lichtsweep beim Hover */
+.option-btn::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(200,168,75,0.08), transparent);
+  transition: left 0.6s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.option-btn:hover::after { left: 150%; }
+.option-btn:hover {
+  background: var(--option-hover);
+  border-color: var(--accent-dim);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5), var(--shadow-glow);
+}
+.option-btn:active { transform: translateY(0); }
+.option-btn-content { flex: 1; z-index: 1; }
+.option-btn .option-number {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-dim);
+  margin-bottom: 4px;
+  font-weight: 700;
+  font-family: var(--font-ui);
+}
+.option-btn:hover .option-number { color: var(--accent); }
+.option-key {
+  width: 22px; height: 22px;
+  font-size: 11px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-sec);
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.5);
+  transition: all var(--transition);
+  z-index: 1;
+}
+.option-btn:hover .option-key {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  background: var(--accent-soft);
+  opacity: 1;
+}
+
+/* Free-Input — moderner */
+.free-input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 14px;
+  transition: all var(--transition);
+}
+.free-input:focus {
+  border-color: var(--accent-dim);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-focus);
+}
+.free-input-row .btn-primary {
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 44px;
+}
+
+/* ── Charakter-Liste: Activity Indicator + Rollen-Pill ─────────────── */
+.char-row {
+  position: relative;
+  padding: 8px 10px;
+  gap: 9px;
+  transition: all var(--transition-med);
+}
+.char-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background var(--transition);
+}
+.char-row.is-protagonist::before { background: var(--accent); }
+.char-row.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-dim);
+}
+.char-row.is-active::before {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+.char-row-name { font-size: 13px; }
+.char-row-role {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(122,179,240,0.08);
+  color: var(--info);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+  border: 1px solid rgba(122,179,240,0.2);
+}
+.char-row.is-protagonist .char-row-role {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+/* ── Header: stärkerer Tiefen-Effekt ─────────────────────────────── */
+.app-header {
+  background: linear-gradient(180deg, var(--bg-dark) 0%, rgba(17,21,31,0.95) 100%);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03), 0 4px 20px rgba(0,0,0,0.5);
+}
+
+/* ── Sidebar Panels: weichere Karten ─────────────────────────────── */
+.panel {
+  background: linear-gradient(180deg, var(--bg-card) 0%, rgba(23,28,40,0.7) 100%);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.02);
+}
+
+/* ── Scene Badge: kompakter Pill ─────────────────────────────────── */
+.scene-badge {
+  background: var(--accent-soft);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ── Mobile Responsive ───────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .app-layout { grid-template-columns: 200px 1fr 220px; }
+  .story-window { padding: var(--sp-5) var(--sp-4); }
+}
+@media (max-width: 880px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+  .sidebar-left {
+    grid-row: 2;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .sidebar-left .panel { min-width: 240px; flex-shrink: 0; }
+  .sidebar-left .sidebar-actions { display: none; }
+  .sidebar-right { display: none; }
+  .story-container { grid-row: 3; }
+  .header-right .btn-ghost,
+  .header-right .ollama-status span:not(.status-dot),
+  .btn-user span:not(:nth-child(2)) { display: none; }
+  .option-buttons { grid-template-columns: 1fr; }
+  .story-content { max-width: 100%; }
+}
+@media (max-width: 540px) {
+  .app-header { padding: 0 var(--sp-2); height: 48px; }
+  .header-logo-text { display: none; }
+  .scene-badge { font-size: 11px; padding: 2px 8px; }
+  .story-text { font-size: 15px; line-height: 1.8; }
+  .story-window { padding: var(--sp-4) var(--sp-3); }
+}
+
+/* ── Modal Overlay: stärkerer Backdrop-Blur ──────────────────────── */
+.modal-overlay { backdrop-filter: blur(10px); background: rgba(8,10,14,0.82); }
+.modal-content {
+  background: linear-gradient(180deg, var(--bg-card) 0%, rgba(23,28,40,0.95) 100%);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7), var(--shadow-glow);
 }

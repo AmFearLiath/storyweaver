@@ -19,6 +19,7 @@ const state = {
   gameStarted: false,
   worldItems: [],
   currentAvatarFile: null,
+  lastActiveCharName: null,
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -406,8 +407,9 @@ function renderCharacters(chars) {
     const avatarHtml = c.avatar_path
       ? `<img src="${esc(c.avatar_path)}" class="char-avatar-thumb" alt="${esc(c.name)}" />`
       : `<span class="char-avatar-thumb char-avatar-placeholder">👤</span>`;
+    const rowCls = `char-row${c.is_protagonist ? ' is-protagonist' : ''}${state.lastActiveCharName === c.name ? ' is-active' : ''}`;
     return `
-      <div class="char-row" onclick="openCharModalEdit(${c.id})">
+      <div class="${rowCls}" onclick="openCharModalEdit(${c.id})">
         ${avatarHtml}
         <span class="char-status-dot ${st}" title="${st}"></span>
         ${prot}
@@ -947,6 +949,12 @@ async function submitFreeAction() {
 
 async function processAction(action, isCustom) {
   if (!state.currentStoryId || state.isProcessing) return;
+  // Detect which character acted (first char-name match in the action text)
+  if (action && state.characters.length) {
+    const lower = action.toLowerCase();
+    const match = state.characters.find(c => c.name && lower.includes(c.name.toLowerCase()));
+    if (match) state.lastActiveCharName = match.name;
+  }
   try {
     setProcessing(true);
     document.getElementById('loadingOverlay').classList.remove('hidden');
