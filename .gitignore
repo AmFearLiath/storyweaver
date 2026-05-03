@@ -33,6 +33,11 @@ frontend/assets/avatars/*
 # ─── Exportierte Charakter-JSONs (nutzerspezifisch) ────────
 charakters/
 
+# ─── Lokale Notizen (nicht in Repo) ────────────────────────
+Anweisungen
+NOTES.md
+TODO.local.md
+
 # ─── Umgebungsvariablen / Secrets ─────────────────────────
 .env
 .env.*

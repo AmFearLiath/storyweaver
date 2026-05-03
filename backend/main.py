@@ -21,7 +21,7 @@ from backend.database import (
     # characters
     get_characters, upsert_character, delete_character,
     # events/game
-    get_recent_events, save_event, increment_scene, reset_game,
+    get_recent_events, save_event, increment_scene, reset_game, undo_last_event,
     # world state
     get_world_state,
     # config
@@ -602,6 +602,7 @@ async def game_state(story_id: int, user: dict = Depends(require_user)):
         "location":            world_state.get("location", "") or "",
         "time":                world_state.get("time", "") or "",
         "weather":             world_state.get("weather", "") or "",
+        "tone":                world_state.get("tone", "") or "",
         "established_facts":   world_state.get("established_facts", []) or [],
         "characters_present":  world_state.get("characters_present", []) or [],
     }
@@ -644,6 +645,7 @@ async def start_game(req: StartRequest, user: dict = Depends(require_user)):
         "location":                  result.get("location", "") or "",
         "time":                      result.get("time", "") or "",
         "weather":                   result.get("weather", "") or "",
+        "tone":                      result.get("tone", "") or "",
         "established_facts":         result.get("established_facts", []) or [],
         "characters_present":        result.get("characters_present", []) or [],
     }
@@ -688,6 +690,7 @@ async def process_action(req: ActionRequest, user: dict = Depends(require_user))
         "location":                  result.get("location", "") or "",
         "time":                      result.get("time", "") or "",
         "weather":                   result.get("weather", "") or "",
+        "tone":                      result.get("tone", "") or "",
         "established_facts":         result.get("established_facts", []) or [],
         "characters_present":        result.get("characters_present", []) or [],
     }
@@ -702,6 +705,34 @@ async def game_reset(req: ResetRequest, user: dict = Depends(require_user)):
     require_story(req.story_id, user)
     reset_game(req.story_id)
     return {"success": True}
+
+
+class UndoRequest(BaseModel):
+    story_id: int
+
+
+@app.post("/api/game/undo")
+async def game_undo(req: UndoRequest, user: dict = Depends(require_user)):
+    require_story(req.story_id, user)
+    ok = undo_last_event(req.story_id)
+    if not ok:
+        return {"success": False, "reason": "empty"}
+    # Return the new tail event (if any) so the client can re-display the previous options
+    events = get_recent_events(req.story_id, limit=1)
+    last = events[-1] if events else None
+    world_state = get_world_state(req.story_id)
+    return {
+        "success": True,
+        "scene_number": (last["scene_number"] if last else 0),
+        "last_event": last,
+        "world_items":         world_state.get("world_items", []),
+        "location":            world_state.get("location", "") or "",
+        "time":                world_state.get("time", "") or "",
+        "weather":             world_state.get("weather", "") or "",
+        "tone":                world_state.get("tone", "") or "",
+        "established_facts":   world_state.get("established_facts", []) or [],
+        "characters_present":  world_state.get("characters_present", []) or [],
+    }
 
 
 # ── History ────────────────────────────────────────────────────────────────────

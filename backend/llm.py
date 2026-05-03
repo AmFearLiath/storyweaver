@@ -59,6 +59,9 @@ def _format_world_state_block(world_state: dict | None) -> str:
         lines.append(f"🕐 Zeit:        {time_}")
     if weather:
         lines.append(f"🌤️ Atmosphäre: {weather}")
+    tone = (world_state.get("tone") or "").strip()
+    if tone:
+        lines.append(f"🎭 Stimmung:    {tone}")
     if chars:
         lines.append(f"👥 Anwesend:    {', '.join(chars)}")
     if facts:
@@ -324,10 +327,17 @@ Genre: {genre}
 3. Halte dich STRIKT an den vorgegebenen Stil
 4. Entscheidungen des Spielers sind PERMANENT und haben Konsequenzen
 5. Erzeuge KEINE Widersprüche zur bestehenden Welt oder den Charakteren
-6. Verwende NIEMALS die verbotenen Ausdrücke oder verbotenen Wörter
+6. Verwende NIEMALS die verbotenen Ausdrücke oder verbotenen Worte
 7. Beschreibe Charaktere mit ihren spezifischen körperlichen Merkmalen und Kleidung
 8. Berücksichtige Alter, Persönlichkeit, Vorlieben und Abneigungen der Charaktere aktiv
-9. Du KANNST und SOLLST handlungsrelevante Gegenstände, Codes UND Hindernisse in der Welt erfinden:
+9. ATMOSPHÄRE — PFLICHT: Der aktuelle Ort, die Zeit und das Wetter (siehe SPIELZUSTAND oben)
+   MÜSSEN aktiv im Story-Text spürbar sein. Beschreibe Lichtverhältnisse passend zur Tageszeit
+   (z.B. dämmernd / mittags grell / nächtlich finster), erwähne Wetter-Effekte (Regen prasselt,
+   Nebel dämpft Geräusche, Sturm peitscht), und verankere die Szene im genannten Ort. Verändere
+   Zeit natürlich entlang der Handlung (Aktionen verbrauchen Zeit — ein Kampf kostet Minuten,
+   eine Reise Stunden). Wetter wechselt langsam, nicht abrupt, außer wenn die Handlung das
+   auslöst. Spieler-Aktionen wie „warte bis zur Nacht“ oder „ziehe weiter“ lassen Zeit/Ort wechseln.
+10. Du KANNST und SOLLST handlungsrelevante Gegenstände, Codes UND Hindernisse in der Welt erfinden:
    — Physische Gegenstände: Schlüssel, Messgeräte, Schutzausrüstung, Heilmittel usw.
    — Zugangscodes: Zahlenkombinationen für Safes, Passwörter für Terminals, PIN-Codes für Türen,
      Chiffren auf Zetteln, eingravierte Nummern auf Objekten — type='code' im Weltzustand
@@ -539,7 +549,7 @@ async def _extract_world_state(
     sys_prompt = (
         "Du bist ein Zustandsanalysator für ein Textadventure. "
         "Antworte NUR mit einem JSON-Objekt (kein Markdown). "
-        "Schema: {\"location\":\"...\",\"time\":\"...\",\"weather\":\"...\","
+        "Schema: {\"location\":\"...\",\"time\":\"...\",\"weather\":\"...\",\"tone\":\"calm|tense|grim|hopeful|mysterious|romantic|epic\","
         "\"characters_present\":[\"Name1\",\"Name2\"],"
         "\"established_facts\":[\"Fakt1\",\"Fakt2\"],"
         "\"world_items\":[{\"id\":\"kurz_eindeutig\",\"name\":\"...\",\"description\":\"...\","
@@ -555,7 +565,9 @@ async def _extract_world_state(
         "world_items: ALLE handlungsrelevanten Gegenstände, Codes UND Hindernisse. "
         "BEHALTE bestehende Einträge — aktualisiere nur deren Status wenn nötig. "
         "Füge neue hinzu wenn sie in der Szene auftauchen oder erwähnt werden. "
-        "established_facts: max 8 kurze Fakten. Keine Erklärungen."
+        "established_facts: max 8 kurze Fakten. Keine Erklärungen. "
+        "tone: ein einzelnes Wort aus {calm,tense,grim,hopeful,mysterious,romantic,epic} — die emotionale Grundstimmung der Szene. "
+        "WICHTIG fortschreitende Zeit: Wenn der Spielertext Aktionen mit Zeit-Wirkung enthält (warten, schlafen, reisen, kämpfen, untersuchen), passe 'time' an (z.B. 'früher Morgen' → 'Mittag' → 'Abend' → 'Nacht')."
     )
     user_prompt = (
         f"Bisheriger Ort: {old_location}\n"
@@ -895,6 +907,7 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
         result["location"]            = _ws_for_meta.get("location", "") or ""
         result["time"]                = _ws_for_meta.get("time", "") or ""
         result["weather"]             = _ws_for_meta.get("weather", "") or ""
+        result["tone"]                = _ws_for_meta.get("tone", "") or ""
         result["established_facts"]   = _ws_for_meta.get("established_facts", []) or []
         result["characters_present"]  = _ws_for_meta.get("characters_present", []) or []
         # Safety net: ensure at least one investigation option for unfound items/codes
@@ -933,6 +946,7 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
         result2["location"]            = _ws_for_meta2.get("location", "") or ""
         result2["time"]                = _ws_for_meta2.get("time", "") or ""
         result2["weather"]             = _ws_for_meta2.get("weather", "") or ""
+        result2["tone"]                = _ws_for_meta2.get("tone", "") or ""
         result2["established_facts"]   = _ws_for_meta2.get("established_facts", []) or []
         result2["characters_present"]  = _ws_for_meta2.get("characters_present", []) or []
         # Safety net: ensure at least one investigation option for unfound items/codes

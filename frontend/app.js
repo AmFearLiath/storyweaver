@@ -21,6 +21,8 @@ const state = {
   currentAvatarFile: null,
   lastActiveCharName: null,
   presentNames: [],
+  ttsActive: false,
+  currentStoryName: '',
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -69,13 +71,40 @@ async function init() {
   const fi = document.getElementById('freeInput');
   if (fi) fi.addEventListener('keydown', e => { if (e.key === 'Enter') submitFreeAction(); });
 
-  // Keyboard shortcuts [1]–[6] for options
+  // Keyboard shortcuts [1]–[6] for options + global shortcuts
   document.addEventListener('keydown', e => {
-    if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+    const inField = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName);
+    // Esc — close modals / stop TTS (works always)
+    if (e.key === 'Escape') {
+      if (state.ttsActive) { stopTTS(); return; }
+      const open = document.querySelector('.modal-overlay:not(.hidden)');
+      if (open) {
+        const close = open.querySelector('.modal-close');
+        if (close) close.click();
+        return;
+      }
+    }
+    if (inField) return;
+    // Strg+Z — undo
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); undoLastAction(); return;
+    }
     const n = parseInt(e.key);
     if (n >= 1 && n <= 6 && !state.isProcessing) {
       const btn = document.querySelector(`.option-btn[data-opt-index="${n - 1}"]`);
-      if (btn && !btn.disabled) btn.click();
+      if (btn && !btn.disabled) btn.click(); return;
+    }
+    // ? — Shortcuts overlay
+    if (e.key === '?' || (e.shiftKey && e.key === '/')) { e.preventDefault(); openShortcutsModal(); return; }
+    // / — focus free input
+    if (e.key === '/') {
+      e.preventDefault();
+      const fi = document.getElementById('freeInput'); if (fi) fi.focus(); return;
+    }
+    // S — export, V — TTS toggle (single key, no modifier)
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key.toLowerCase() === 's' && state.gameStarted) { e.preventDefault(); exportStoryMarkdown(); return; }
+      if (e.key.toLowerCase() === 'v' && state.gameStarted) { e.preventDefault(); toggleSceneTTS(); return; }
     }
   });
 
@@ -150,6 +179,7 @@ async function selectStory(id) {
   state.currentStoryId = id;
   localStorage.setItem('currentStoryId', id);
   state.currentStory = state.stories.find(s => s.id === id) || null;
+  state.currentStoryName = state.currentStory ? (state.currentStory.name || '') : '';
 
   // Update header
   const nameEl = document.getElementById('storyName');
@@ -433,6 +463,18 @@ function renderCharacters(chars) {
         ${stateLine ? `<div class="char-row-state">${esc(stateLine)}</div>` : ''}
       </div>`;
   }).join('');
+  _updateHpCounter(chars);
+}
+
+function _updateHpCounter(chars) {
+  const alive = chars.filter(c => (c.status || 'alive') === 'alive').length;
+  const dead  = chars.filter(c => (c.status || '').toLowerCase() === 'dead' || c.status === 'tot').length;
+  const elA = document.getElementById('hpAlive');
+  const elD = document.getElementById('hpDead');
+  const wrap = document.getElementById('hpDeadWrap');
+  if (elA) elA.textContent = alive;
+  if (elD) elD.textContent = dead;
+  if (wrap) wrap.style.display = dead > 0 ? '' : 'none';
 }
 
 function openCharModal(id = null) {
@@ -901,6 +943,7 @@ async function loadGameState() {
         location:           gs.location,
         time:               gs.time,
         weather:            gs.weather,
+        tone:               gs.tone,
         established_facts:  gs.established_facts,
         characters_present: gs.characters_present,
       });
@@ -1044,6 +1087,12 @@ function applyWorldAtmosphere(meta) {
   else if (/(nebel|dunst|fog|mist|smoke|rauch)/.test(w))                body.classList.add('weather-fog');
   else if (/(schnee|frost|snow|ice|eis)/.test(w))                       body.classList.add('weather-snow');
   else if (/(klar|sonnig|warm|clear|sunny)/.test(w))                    body.classList.add('weather-clear');
+  // Tone — emotional theming
+  Array.from(body.classList).forEach(c => { if (c.startsWith('tone-')) body.classList.remove(c); });
+  const tone = (meta.tone || '').toLowerCase().trim();
+  if (tone && /^(calm|tense|grim|hopeful|mysterious|romantic|epic)$/.test(tone)) {
+    body.classList.add('tone-' + tone);
+  }
 
   // Facts → Lore panel
   renderLoreFacts(Array.isArray(meta.established_facts) ? meta.established_facts : []);
@@ -1172,7 +1221,13 @@ function _buildItemHtml(item) {
     }
   }
   const tip = [item.description, item.required_for ? 'Benötigt für: ' + item.required_for : ''].filter(Boolean).join(' | ');
-  return `<div class="world-item ${cls}" title="${esc(tip)}">
+  // Click handler: prefill action with item-specific verb (skip terminal states)
+  const terminal = (itype === 'item' && status === 'used') ||
+                   (itype === 'code' && status === 'used') ||
+                   (itype === 'obstacle' && (status === 'overcome' || status === 'avoided'));
+  const clickAttr = terminal ? '' :
+    ` onclick="insertItemAction('${esc(item.name)}','${itype}','${status}')" style="cursor:pointer"`;
+  return `<div class="world-item ${cls}" title="${esc(tip)}"${clickAttr}>
     <span class="wi-icon">${icon}</span>
     <div class="wi-body"><span class="wi-name">${esc(item.name)}</span>${meta}</div>
   </div>`;
@@ -1319,12 +1374,17 @@ function renderScene(result, playerAction) {
     location:           result.location,
     time:               result.time,
     weather:            result.weather,
+    tone:               result.tone,
     established_facts:  result.established_facts,
     characters_present: result.characters_present,
   });
   // Trigger scene-pulse on header counter
   const sb = document.getElementById('sceneBadge');
   if (sb) { sb.classList.remove('scene-pulse'); void sb.offsetWidth; sb.classList.add('scene-pulse'); }
+  // Auto-save indicator pulse
+  showSaveIndicator();
+  // Enable Undo button — at least one event now exists
+  const ub = document.getElementById('undoBtn'); if (ub) ub.disabled = false;
 }
 
 function renderStoryEntries(events) {
@@ -1745,6 +1805,125 @@ async function importConfig(input) {
     input.value = '';
   }
 }
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// EXTRA FEATURES (v3.1): Undo, TTS, Export, Item-Click, Save-Indicator, Shortcuts
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Insert item-specific verb into the action input field
+function insertItemAction(name, type, status) {
+  const fi = document.getElementById('freeInput');
+  if (!fi) return;
+  let verb;
+  if (type === 'code') {
+    verb = (status === 'found') ? `Gib den Code "${name}" ein` : `Suche nach dem Code "${name}"`;
+  } else if (type === 'obstacle') {
+    verb = `Versuche das Hindernis "${name}" zu überwinden`;
+  } else {
+    verb = (status === 'available') ? `Hebe ${name} auf` : `Benutze ${name}`;
+  }
+  fi.value = verb;
+  fi.focus();
+  fi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Undo last action
+async function undoLastAction() {
+  if (!state.currentStoryId || state.isProcessing) return;
+  if (!confirm('Letzte Szene wirklich rückgängig machen?')) return;
+  try {
+    const r = await api('/api/game/undo', 'POST', { story_id: state.currentStoryId });
+    if (!r || !r.success) {
+      showToast('Nichts zum Rückgängigmachen');
+      return;
+    }
+    showToast('Letzte Szene zurückgenommen');
+    // Soft reload of game state to refresh story view + atmosphere + counters
+    await loadGameState();
+  } catch (e) {
+    showToast('Undo fehlgeschlagen: ' + e.message);
+  }
+}
+
+// Save-Indicator: brief "saved" pulse after each scene
+function showSaveIndicator() {
+  const el = document.getElementById('saveIndicator');
+  if (!el) return;
+  el.classList.remove('saving');
+  void el.offsetWidth;
+  el.classList.add('saving');
+  setTimeout(() => el.classList.remove('saving'), 1800);
+}
+
+// ── TTS (Web Speech API) ──────────────────────────────────────────────────────
+function _pickGermanVoice() {
+  try {
+    const voices = window.speechSynthesis.getVoices() || [];
+    return voices.find(v => /^de(-|_)/i.test(v.lang)) || voices.find(v => /german|deutsch/i.test(v.name)) || null;
+  } catch { return null; }
+}
+
+function speakText(text) {
+  if (!('speechSynthesis' in window)) { showToast('TTS nicht unterstützt'); return; }
+  stopTTS();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'de-DE'; u.rate = 1.0; u.pitch = 1.0;
+  const v = _pickGermanVoice(); if (v) u.voice = v;
+  u.onend = () => { state.ttsActive = false; document.querySelectorAll('.tts-btn.is-playing').forEach(b => b.classList.remove('is-playing')); };
+  u.onerror = u.onend;
+  state.ttsActive = true;
+  window.speechSynthesis.speak(u);
+}
+
+function stopTTS() {
+  try { window.speechSynthesis.cancel(); } catch {}
+  state.ttsActive = false;
+  document.querySelectorAll('.tts-btn.is-playing').forEach(b => b.classList.remove('is-playing'));
+}
+
+function toggleSceneTTS() {
+  if (state.ttsActive) { stopTTS(); return; }
+  // Find the last story-text in the content area
+  const items = document.querySelectorAll('#storyContent .story-text');
+  if (!items.length) return;
+  const txt = items[items.length - 1].innerText || '';
+  if (!txt.trim()) return;
+  speakText(txt);
+}
+
+// ── Markdown Export ──────────────────────────────────────────────────────────
+async function exportStoryMarkdown() {
+  if (!state.currentStoryId) { showToast('Kein Spiel geladen'); return; }
+  try {
+    const r = await api(`/api/history/${state.currentStoryId}`, 'GET');
+    if (!r) return;
+    const events = r.events || [];
+    const storyName = (state.currentStoryName || 'Storyweaver-Story').replace(/[\\/:*?"<>|]/g, '-');
+    let md = `# ${storyName}\n\n`;
+    md += `*Exportiert am ${new Date().toLocaleString('de-DE')} – ${events.length} Szene(n)*\n\n---\n\n`;
+    events.forEach(ev => {
+      md += `## Szene ${ev.scene_number}\n\n`;
+      if (ev.player_action) md += `**▶ Aktion:** ${ev.player_action}\n\n`;
+      md += `${(ev.story_text || '').trim()}\n\n`;
+      if (ev.world_changes)   md += `> _Welt-Änderungen:_ ${ev.world_changes}\n\n`;
+      if (ev.events_summary)  md += `> _Ereignisse:_ ${ev.events_summary}\n\n`;
+      md += `---\n\n`;
+    });
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${storyName}_${new Date().toISOString().slice(0,10)}.md`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    showToast('Story exportiert');
+  } catch (e) { showToast('Export fehlgeschlagen: ' + e.message); }
+}
+
+// ── Shortcuts Modal ──────────────────────────────────────────────────────────
+function openShortcutsModal()  { const m = document.getElementById('shortcutsModal'); if (m) m.classList.remove('hidden'); }
+function closeShortcutsModal() { const m = document.getElementById('shortcutsModal'); if (m) m.classList.add('hidden'); }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);

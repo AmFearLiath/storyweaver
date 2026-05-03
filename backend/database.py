@@ -674,6 +674,31 @@ def reset_game(story_id: int):
     conn.close()
 
 
+def undo_last_event(story_id: int) -> bool:
+    """Delete the last event of the story and decrement the scene counter.
+    Returns True if an event was removed, False if there was nothing to undo."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id FROM events WHERE story_id=? ORDER BY id DESC LIMIT 1",
+        (story_id,),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    conn.execute("DELETE FROM events WHERE id=?", (row["id"],))
+    cnt = conn.execute(
+        "SELECT scene_counter FROM stories WHERE id=?", (story_id,)
+    ).fetchone()
+    new_val = max(0, (cnt["scene_counter"] if cnt else 0) - 1)
+    conn.execute(
+        "UPDATE stories SET scene_counter=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (new_val, story_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
 # ── Global LLM Config ─────────────────────────────────────────────────────────
 
 def get_llm_config() -> dict:

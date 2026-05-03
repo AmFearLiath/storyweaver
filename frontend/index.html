@@ -21,6 +21,13 @@
     </button>
     <span class="scene-badge" id="sceneBadge">Szene 0</span>
     <div class="gm-pulse" id="gmPulse" title="Game Master Status"></div>
+    <span class="hp-counter" id="hpCounter" title="Lebende / Tote Charaktere">
+      <span class="hp-alive">♥ <b id="hpAlive">0</b></span>
+      <span class="hp-dead" id="hpDeadWrap" style="display:none">☠ <b id="hpDead">0</b></span>
+    </span>
+    <span class="save-indicator" id="saveIndicator" title="Auto-Speicher-Status">
+      <span class="save-dot"></span><span class="save-label">gespeichert</span>
+    </span>
   </div>
   <div class="header-right">
     <div class="ollama-status">
@@ -29,8 +36,11 @@
     </div>
     <a href="/admin" class="btn btn-ghost btn-sm" title="Admin-Bereich" target="_blank">🛡️ Admin</a>
     <button class="btn btn-ghost btn-sm" onclick="openLLMModal()" title="LLM-Einstellungen">⚙️ LLM</button>
-    <button class="btn btn-ghost btn-sm" onclick="openHistoryModal()">📜 Verlauf</button>
-    <button class="btn btn-danger-ghost btn-sm" onclick="confirmReset()">🔄 Neu starten</button>
+    <button class="btn btn-ghost btn-sm" onclick="openHistoryModal()" title="Verlauf">📜 Verlauf</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportStoryMarkdown()" title="Story als Markdown speichern">💾 Export</button>
+    <button class="btn btn-ghost btn-sm" id="undoBtn" onclick="undoLastAction()" disabled title="Letzte Aktion zurücknehmen (Strg+Z)">↶ Undo</button>
+    <button class="btn btn-ghost btn-sm" onclick="openShortcutsModal()" title="Tastatur-Shortcuts (?)">⌨️</button>
+    <button class="btn btn-danger-ghost btn-sm" onclick="confirmReset()" title="Spiel neu starten">🔄</button>
     <div class="user-menu-wrap">
       <button class="btn-user" id="userMenuBtn" onclick="toggleUserMenu()">
         <span>👤</span><span id="userName">...</span><span>▾</span>
@@ -785,6 +795,31 @@
 
 <!-- ══ TOAST ════════════════════════════════════════════════════════════════ -->
 <div id="toast" class="toast hidden"></div>
+
+<!-- ══ SHORTCUTS HELP MODAL ════════════════════════════════════════════════ -->
+<div id="shortcutsModal" class="modal-overlay hidden" onclick="closeShortcutsModal()">
+  <div class="modal-content modal-narrow" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>⌨️ Tastatur-Shortcuts</h2>
+      <button class="modal-close" onclick="closeShortcutsModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <table class="shortcuts-table">
+        <tr><td><kbd>1</kbd>–<kbd>6</kbd></td><td>Option auswählen</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Freie Aktion absenden (im Eingabefeld)</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Eingabefeld fokussieren</td></tr>
+        <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd></td><td>Letzte Aktion rückgängig</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Story als Markdown exportieren</td></tr>
+        <tr><td><kbd>V</kbd></td><td>Aktuelle Szene vorlesen (TTS)</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Modal schließen / TTS stoppen</td></tr>
+        <tr><td><kbd>?</kbd></td><td>Diese Übersicht öffnen</td></tr>
+      </table>
+      <p style="margin-top:14px;font-size:11px;color:var(--text-dim);text-align:center">
+        Shortcuts funktionieren nicht, während ein Eingabefeld fokussiert ist.
+      </p>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>
