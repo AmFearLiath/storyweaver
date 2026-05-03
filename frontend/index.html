@@ -112,7 +112,14 @@
       <div id="storyContent" class="story-content"></div>
       <div id="loadingOverlay" class="loading-overlay hidden">
         <div class="loading-spinner"></div>
-        <p>Der Game Master schreibt...</p>
+        <p id="loadingMainText">Der Game Master schreibt...</p>
+        <ul id="pipelineStatus" class="pipeline-status">
+          <li data-phase="interpret"><span class="pipe-icon">🧠</span><span class="pipe-label">Aktion verstehen</span></li>
+          <li data-phase="recap"    ><span class="pipe-icon">📜</span><span class="pipe-label">Kontext zusammenfassen</span></li>
+          <li data-phase="generate" ><span class="pipe-icon">✍️</span><span class="pipe-label">Szene schreiben</span></li>
+          <li data-phase="check"    ><span class="pipe-icon">🔍</span><span class="pipe-label">Konsistenz prüfen</span></li>
+          <li data-phase="extract"  ><span class="pipe-icon">📦</span><span class="pipe-label">Welt aktualisieren</span></li>
+        </ul>
       </div>
     </div>
 

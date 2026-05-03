@@ -38,6 +38,72 @@ def _flatten_field(v) -> str:
     return str(v)
 
 
+# ── Genre-Anti-Drift ──────────────────────────────────────────────────────────
+# Tropes/elements that should NEVER appear in a given genre, baked into the
+# system prompt so even small LLMs stay on-topic.
+_GENRE_FORBIDDEN = {
+    "postapokalypse": [
+        "klassische Magie / Zaubersprüche",
+        "Götter, Engel, Dämonen, übernatürliche Wesen",
+        "esoterische 'Energienetze', 'Resonanzen', 'Auras' oder 'Chakren'",
+        "Drachen, Elfen, Zwerge, Orks oder andere Fantasy-Rassen",
+        "mittelalterliche Schwerter, Bögen oder Plattenrüstungen als Hauptwaffen",
+    ],
+    "scifi": [
+        "klassische Magie und Zaubersprüche",
+        "Götter und religiöse Wunder als physische Realität",
+        "mittelalterliche Schwerter und Bögen als Hauptwaffen",
+    ],
+    "cyberpunk": [
+        "klassische Magie und Götter (außer als kulturelle Metapher)",
+        "Drachen, Elfen, Zwerge oder Fantasy-Rassen",
+        "mittelalterliche Settings (Burgen, Bauernhöfe, Königshöfe)",
+    ],
+    "highfantasy": [
+        "moderne Hochtechnologie (Computer, Smartphones, Autos, Schusswaffen)",
+        "Atomwaffen, Cyber-Implantate, Hologramme",
+    ],
+    "fantasy": [
+        "moderne Schusswaffen, Computer, Autos",
+        "Atomtechnologie, Cyber-Implantate",
+    ],
+    "horror": [
+        "klamaukige Comedy-Wendungen",
+        "happy-go-lucky Sofortlösungen ohne Konsequenz",
+    ],
+    "krimi": [
+        "übernatürliche Erklärungen (Magie, Geister) für reale Verbrechen",
+        "Deus-ex-machina-Auflösungen",
+    ],
+    "romance": [
+        "abrupte Genre-Wechsel zu Action/Horror ohne Setup",
+    ],
+}
+
+
+def _genre_anti_drift_block(genre: str) -> str:
+    """Return a block listing genre-incompatible elements to avoid drift."""
+    if not genre:
+        return ""
+    key = (genre or "").lower().replace(" ", "").replace("-", "").replace("_", "")
+    # Try exact match, then fuzzy substring match
+    forbidden: list[str] = _GENRE_FORBIDDEN.get(key, [])
+    if not forbidden:
+        for k, v in _GENRE_FORBIDDEN.items():
+            if k in key or key in k:
+                forbidden = v
+                break
+    if not forbidden:
+        return ""
+    lines = "\n".join(f"   ✗ {item}" for item in forbidden)
+    return (
+        f"\n## GENRE-ANKER ({genre.upper()}) — NIEMALS in der Geschichte verwenden:\n"
+        f"{lines}\n"
+        "Die Welt ist KONSISTENT in ihrem Genre. Wenn der Spieler so etwas vorschlägt,\n"
+        "interpretiere es im Genre-Rahmen um (z.B. 'Magie' → 'unbekannte Hochtechnologie' im SciFi).\n"
+    )
+
+
 def _format_world_state_block(world_state: dict | None) -> str:
     """Format the world state as an authoritative constraint block at the top of the system prompt."""
     if not world_state:
@@ -295,6 +361,7 @@ def build_system_prompt(config: dict, characters: list, output_language: str = "
     rules_str = "\n".join(f"- {r}" for r in all_rules) if all_rules else "- (keine besonderen Regeln)"
 
     world_state_section = _format_world_state_block(world_state)
+    anti_drift_block    = _genre_anti_drift_block(genre)
 
     return f"""Du bist ein erfahrener, kreativer Game Master für ein interaktives Textadventure auf {output_language}.
 
@@ -360,7 +427,22 @@ Genre: {genre}
      an ihrem konkreten Fundort zu suchen, zu untersuchen oder zu öffnen.
      Bei aktiven Hindernissen (status=active): mindestens eine Option zum Umgang damit anbieten.
      Beispiel: „Durchsuche die Schreibtisch-Schublade", „Deaktiviere den Stolperdraht" oder „Umgehe das Hindernis vorsichtig"
-
+11. SETTING-ANKER: Der Schauplatz darf NIEMALS abrupt wechseln. Eine Ortsänderung
+    erfordert IMMER eine explizite Spieler-Aktion (gehen, fahren, kriechen, fliehen, teleportieren).
+    Die neue Szene MUSS am Ende der vorigen Szene physisch anschlussfähig sein.
+    Beispiel: Wenn die letzte Szene in einem Vault-Eingang endete, kann die nächste NICHT
+    in einem Güterzug spielen — es sei denn der Spieler hat sich explizit dorthin bewegt.
+12. ANTI-WIEDERHOLUNG: Wenn der Spieler in zwei aufeinanderfolgenden Szenen ähnliche
+    Aktionen versucht (untersuchen, analysieren, beobachten ohne Handlung), MUSS in dieser
+    dritten Szene ein konkreter Fortschritt stattfinden — Erfolg, Misserfolg ODER eine neue
+    Komplikation, die das Pattern zwingend bricht. Niemals dieselbe Aktion 3× ergebnislos.
+13. PERSPEKTIV-KONSISTENZ: Bleibe in der EINMAL etablierten Erzählperspektive (in der Regel
+    dritte Person, Protagonist im Fokus — er/sie/Name). Wechsle NIEMALS innerhalb des Spiels
+    in 'Du'-/'Ihr'-Form, es sei denn die Geschichte adressiert den Spieler explizit.
+14. NPC-DETAILS: Wenn ein NPC zum ersten Mal Kleidung/Ausrüstung zeigt oder etwas trägt,
+    erwähne diese Details konkret (Stoff, Farbe, sichtbare Items). Diese Details werden
+    in der Welt persistent gespeichert und sollten konsistent fortgeführt werden.
+{anti_drift_block}
 ## OUTPUT FORMAT
 Antworte IMMER und AUSSCHLIESSLICH mit genau diesen zwei Feldern im JSON-Format:
 {{
@@ -639,7 +721,10 @@ async def _extract_character_states(
         "Schema: [{\"name\":\"...\",\"current_clothing\":\"...\","
         "\"inventory\":[\"Gegenstand1\",\"Gegenstand2\"],"
         "\"new_experiences\":[\"Kurze Beschreibung\"]}] "
-        "Gib NUR Charaktere zurück, die sich wirklich veraendert haben. "
+        "WICHTIG: Erfasse ALLE Charaktere — auch NPCs — bei DEREN ERSTEM AUFTRETEN, "
+        "wenn der Szenentext ihre Kleidung, Ausrüstung oder sichtbares Inventar beschreibt. "
+        "Wenn current_clothing eines Charakters bisher leer ist und der Text Kleidung erwähnt, "
+        "MUSST du diesen Charakter mit der beschriebenen Kleidung zurückgeben. "
         "inventory: vollstaendige aktuelle Liste (max 15 Eintraege). "
         "new_experiences: nur wirklich neue Ereignisse, max 2 pro Szene, kurze Saetze. "
         "Leere Felder als leeren String oder leere Liste. Keine Erlaeuterungen."
@@ -808,12 +893,230 @@ def _ensure_investigation_options(options: list, world_state: dict | None, langu
     return options + [opt]
 
 
-async def generate_scene(player_action: str, scene_number: int, story_id: int) -> dict:
+# ── Multi-Stage Pipeline Helpers ──────────────────────────────────────────────
+
+async def _interpret_action(
+    player_action: str,
+    world_state: dict | None,
+    recent_events: list,
+    model: str,
+    output_language: str = "Deutsch",
+) -> str:
+    """Stage 1: Clean up player input — fix typos in character names, sharpen unclear actions.
+    Returns a single clean sentence describing what the player intends to do.
+    For empty/menu/start actions, returns the input unchanged."""
+    pa = (player_action or "").strip()
+    if not pa or pa.lower() in ("[spielstart]", "spielstart", "[start]", "start"):
+        return pa
+    # Skip cleaning for very short menu-style picks (numbers, single words)
+    if len(pa) < 4:
+        return pa
+
+    char_names = []
+    if world_state:
+        char_names = [c for c in (world_state.get("characters_present") or []) if isinstance(c, str)]
+    char_hint = ", ".join(char_names[:6]) if char_names else "(keine bekannt)"
+
+    last_excerpt = ""
+    if recent_events:
+        last = recent_events[-1].get("story_text", "") or ""
+        last_excerpt = last[-300:]
+
+    sys_prompt = (
+        f"Du bist ein Eingabe-Korrektor für ein Textadventure auf {output_language}. "
+        "Korrigiere Tippfehler in der Spieleraktion (insbesondere Charakternamen aus der "
+        "Liste anwesender Charaktere). Reformuliere unklare Aktionen in EINEN klaren Satz "
+        "aus Sicht der Spieler-Eingabe. Behalte den Sinn bei. Erfinde nichts dazu. "
+        "Antworte NUR mit dem korrigierten Satz — KEIN JSON, keine Erklärung, keine Anführungszeichen."
+    )
+    user_prompt = (
+        f"Anwesende Charaktere: {char_hint}\n"
+        f"Letzter Szenen-Auszug:\n{last_excerpt}\n\n"
+        f"Spieler-Eingabe:\n{pa}\n\n"
+        f"Korrigierter Satz:"
+    )
+    payload = {
+        "model": model,
+        "system": sys_prompt,
+        "prompt": user_prompt,
+        "stream": False,
+        "options": {"temperature": 0.2, "num_predict": 80, "num_ctx": 1024},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(OLLAMA_URL, json=payload)
+            resp.raise_for_status()
+            raw = (resp.json().get("response") or "").strip()
+        # Take first non-empty line, strip wrapping quotes
+        line = next((l.strip() for l in raw.splitlines() if l.strip()), "")
+        line = line.strip('"').strip("'").strip()
+        if 3 <= len(line) <= 400:
+            return line
+    except Exception:
+        pass
+    return pa
+
+
+async def _build_recap(
+    recent_events: list,
+    world_state: dict | None,
+    model: str,
+    depth: int = 4,
+    output_language: str = "Deutsch",
+) -> str:
+    """Stage 2: Build a 3-4 sentence recap of the recent events.
+    Replaces verbose event-dumping in the user prompt for older scenes.
+    Returns empty string for very early scenes (recap not useful yet)."""
+    if not recent_events or len(recent_events) < 2:
+        return ""
+    # Take the last `depth` events for compact summarization
+    slice_evts = recent_events[-depth:]
+    bullets = []
+    for ev in slice_evts:
+        action = ev.get("interpreted_action") or ev.get("player_action") or ""
+        text = (ev.get("story_text") or "")[:400]
+        bullets.append(f"S{ev.get('scene_number','?')} [{action[:60]}]: {text}")
+    joined = "\n\n".join(bullets)
+
+    loc = (world_state or {}).get("location", "")
+    chars = ", ".join((world_state or {}).get("characters_present", [])[:5])
+    facts = "; ".join((world_state or {}).get("established_facts", [])[:5])
+
+    sys_prompt = (
+        f"Du fasst eine laufende Geschichte für einen Game Master zusammen. Sprache: {output_language}. "
+        "Schreibe genau 3-4 prägnante Sätze, die enthalten: aktuellen Ort, anwesende Charaktere, "
+        "offene Konflikte/Spannungsbögen, und den letzten kritischen Wendepunkt. "
+        "Keine Floskeln, keine Wiederholungen. Antworte NUR mit der Zusammenfassung — kein JSON."
+    )
+    user_prompt = (
+        f"Aktueller Ort: {loc}\nAnwesend: {chars}\nWichtige Fakten: {facts}\n\n"
+        f"=== LETZTE SZENEN ===\n{joined}\n\n"
+        f"Zusammenfassung in 3-4 Sätzen:"
+    )
+    payload = {
+        "model": model,
+        "system": sys_prompt,
+        "prompt": user_prompt,
+        "stream": False,
+        "options": {"temperature": 0.3, "num_predict": 250, "num_ctx": 3072},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            resp = await client.post(OLLAMA_URL, json=payload)
+            resp.raise_for_status()
+            raw = (resp.json().get("response") or "").strip()
+        # Cleanup: take first paragraph only, max 600 chars
+        para = raw.split("\n\n")[0].strip()
+        if len(para) > 600:
+            para = para[:600].rsplit(".", 1)[0] + "."
+        return para
+    except Exception:
+        return ""
+
+
+async def _coherence_check(
+    scene_text: str,
+    world_state: dict | None,
+    recap: str,
+    char_names: list,
+    genre: str,
+    model: str,
+) -> dict:
+    """Stage 4: Check generated scene for consistency violations.
+    Returns {'score': 1-10, 'issues': ['...']}. Score >=6 means acceptable."""
+    if not scene_text or len(scene_text) < 100:
+        return {"score": 10, "issues": []}
+
+    loc = (world_state or {}).get("location", "")
+    present = ", ".join((world_state or {}).get("characters_present", [])[:5])
+    forbidden = _GENRE_FORBIDDEN.get(
+        (genre or "").lower().replace(" ", "").replace("-", "").replace("_", ""),
+        []
+    )
+    forbidden_text = "; ".join(forbidden) if forbidden else "(keine spezifischen Tropen)"
+
+    sys_prompt = (
+        "Du bist ein Qualitäts-Prüfer für Game-Master-Szenen. Antworte NUR mit JSON: "
+        "{\"score\":1-10,\"issues\":[\"kurzer Bruch1\",\"kurzer Bruch2\"]}. "
+        "Score 10=perfekt konsistent, 1=völliger Bruch. "
+        "Prüfe diese Aspekte: "
+        "(a) Setting-Anker: Wechselt der Ort abrupt ohne Bewegung des Spielers? "
+        "(b) Charakter-Konsistenz: Sind Namen korrekt geschrieben? Tauchen unbekannte Personen unmotiviert auf? "
+        "(c) Genre-Treue: Verbotene Tropen (siehe Liste) im Text? "
+        "(d) Perspektiv-Konsistenz: Bleibt die Erzählperspektive gleich? "
+        "(e) Wiederholung: Wird das gleiche Pattern der Vor-Szene erneut ohne Fortschritt durchgespielt? "
+        "Sei streng, aber nicht pedantisch. Eine kleine stilistische Variation ist KEIN Bruch."
+    )
+    user_prompt = (
+        f"Bisheriger Ort laut Welt: {loc}\n"
+        f"Anwesende Chars laut Welt: {present}\n"
+        f"Genre: {genre}\n"
+        f"Verbotene Tropen: {forbidden_text}\n"
+        f"Recap der bisherigen Story:\n{recap or '(noch keiner)'}\n\n"
+        f"=== NEUE SZENE ===\n{scene_text[:2500]}\n\n"
+        f"JSON-Bewertung:"
+    )
+    payload = {
+        "model": model,
+        "system": sys_prompt,
+        "prompt": user_prompt,
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0.1, "num_predict": 250, "num_ctx": 3072},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            resp = await client.post(OLLAMA_URL, json=payload)
+            resp.raise_for_status()
+            raw = (resp.json().get("response") or "").strip()
+        parsed = _extract_json(raw)
+        if isinstance(parsed, dict):
+            score = parsed.get("score", 10)
+            try:
+                score = int(score)
+            except Exception:
+                score = 10
+            issues = parsed.get("issues") or []
+            if not isinstance(issues, list):
+                issues = []
+            return {"score": max(1, min(10, score)), "issues": [str(i)[:200] for i in issues[:5]]}
+    except Exception:
+        pass
+    return {"score": 10, "issues": []}
+
+
+async def generate_scene(
+    player_action: str,
+    scene_number: int,
+    story_id: int,
+    progress=None,
+) -> dict:
+    """Multi-stage generation pipeline:
+       1. interpret_action  (clean typos, sharpen intent)
+       2. build_recap       (compact summary of recent events)
+       3. main scene LLM    (the actual GM call)
+       4. coherence_check   (score, re-roll once if < 6)
+       5. extract_world + extract_character_states (in parallel)
+
+    `progress` is an optional async callable progress(phase: str, label: str)
+    that gets called at every stage transition for SSE streaming.
+    """
+    import asyncio
+
+    async def _emit(phase: str, label: str):
+        if progress is None:
+            return
+        try:
+            res = progress(phase, label)
+            if asyncio.iscoroutine(res):
+                await res
+        except Exception:
+            pass
+
     config     = get_story_config(story_id)
     characters = get_characters(story_id)
     llm_cfg    = get_llm_config()
 
-    # Read configurable parameters
     memory_depth    = int(llm_cfg.get("memory_depth", "3"))
     cfg_num_predict = int(llm_cfg.get("num_predict", "1600"))
     num_ctx         = int(llm_cfg.get("num_ctx", "4096"))
@@ -822,7 +1125,29 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
     world_state = get_world_state(story_id)
     events      = get_recent_events(story_id, limit=max(memory_depth, 8))
 
-    # Collect unfound items/codes that need an investigation option in every scene
+    model = llm_cfg.get("ollama_model", "")
+    if not model or model == "llama3":
+        tags = await check_ollama_connection()
+        available = tags.get("models", [])
+        model = available[0] if available else "llama3"
+    temp     = float(llm_cfg.get("temperature", "0.7"))
+    top_p    = float(llm_cfg.get("top_p", "0.9"))
+    rep_pen  = float(llm_cfg.get("repeat_penalty", "1.1"))
+    genre    = config.get("story_genre_custom") or config.get("story_genre", "Fantasy")
+
+    # ── STAGE 1: Interpret action ────────────────────────────────────────────
+    await _emit("interpret", "🧠 Aktion verstehen")
+    cleaned_action = await _interpret_action(
+        player_action, world_state, events, model, output_language
+    )
+
+    # ── STAGE 2: Build recap (only useful from scene 3 onward) ───────────────
+    recap_text = ""
+    if scene_number >= 3 and len(events) >= 2:
+        await _emit("recap", "📜 Kontext zusammenfassen")
+        recap_text = await _build_recap(events, world_state, model, depth=memory_depth + 1, output_language=output_language)
+
+    # Collect unfound items/codes & active obstacles (mandatory hints)
     unfound_items    = _get_unfound_items(world_state)
     active_obstacles = _get_active_obstacles(world_state)
 
@@ -833,16 +1158,14 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
         "hoch":    "MINDESTENS 3 vollständige Absätze, gerne 4",
     }
     detail_len  = _detail_map.get(config.get("detail_level", "hoch"), "MINDESTENS 3 Absätze")
-    user_prompt = build_user_prompt(player_action, events, scene_number, detail_len, memory_depth, unfound_items, active_obstacles)
-
-    model = llm_cfg.get("ollama_model", "")
-    if not model or model == "llama3":
-        tags = await check_ollama_connection()
-        available = tags.get("models", [])
-        model = available[0] if available else "llama3"
-    temp     = float(llm_cfg.get("temperature", "0.7"))
-    top_p    = float(llm_cfg.get("top_p", "0.9"))
-    rep_pen  = float(llm_cfg.get("repeat_penalty", "1.1"))
+    user_prompt = build_user_prompt(
+        cleaned_action, events, scene_number, detail_len,
+        memory_depth, unfound_items, active_obstacles
+    )
+    if recap_text:
+        user_prompt = (
+            f"## RECAP DER BISHERIGEN STORY\n{recap_text}\n\n" + user_prompt
+        )
 
     async def _call_ollama(sys_prompt: str, usr_prompt: str, num_predict: int = cfg_num_predict) -> str:
         payload = {
@@ -883,52 +1206,95 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
             "events":                    parsed.get("events", ""),
             "world_changes":             parsed.get("world_changes", ""),
             "character_updates":         parsed.get("character_updates", ""),
-            "interpreted_player_action": parsed.get("interpreted_player_action", player_action),
+            "interpreted_player_action": parsed.get("interpreted_player_action", cleaned_action),
         }
 
-    # Attempt 1: full prompt
+    # ── STAGE 3: Main scene generation ───────────────────────────────────────
+    await _emit("generate", "✍️ Szene schreiben")
     raw = await _call_ollama(system_prompt, user_prompt)
     result = _parse_result(raw)
-    if result and len(result["story"]) >= 150:
-        new_ws = await _extract_world_state(result["story"], world_state, config, model, num_ctx, output_language)
+
+    # ── STAGE 4: Coherence check + optional re-roll ──────────────────────────
+    coherence: dict = {"score": 10, "issues": []}
+    if result and scene_number >= 3 and len(result.get("story", "")) >= 200:
+        await _emit("check", "🔍 Konsistenz prüfen")
+        char_names = [c.get("name", "") for c in characters]
+        coherence = await _coherence_check(
+            result["story"], world_state, recap_text, char_names, genre, model
+        )
+        if coherence.get("score", 10) < 6 and coherence.get("issues"):
+            # Re-roll once with concrete violation hints baked into the prompt
+            await _emit("reroll", "🔁 Szene überarbeiten")
+            issues_text = "\n".join(f"   - {i}" for i in coherence["issues"][:5])
+            harden = (
+                "\n\n## ⚠️ DIE LETZTE SZENE WURDE WEGEN INKONSISTENZEN ABGELEHNT\n"
+                "Schreibe sie neu und vermeide diese Brüche:\n"
+                f"{issues_text}\n"
+                "Bleibe strikt im etablierten Ort, Genre und Erzähl-Perspektive."
+            )
+            raw_retry = await _call_ollama(system_prompt + harden, user_prompt)
+            result_retry = _parse_result(raw_retry)
+            if result_retry and len(result_retry.get("story", "")) >= 200:
+                # Verify retry actually improved
+                retry_check = await _coherence_check(
+                    result_retry["story"], world_state, recap_text, char_names, genre, model
+                )
+                if retry_check.get("score", 10) > coherence.get("score", 10):
+                    result = result_retry
+                    coherence = retry_check
+
+    # ── STAGE 5: Extract world + character states (parallel) ─────────────────
+    if result and len(result.get("story", "")) >= 150:
+        await _emit("extract", "📦 Welt aktualisieren")
+        new_ws_task   = _extract_world_state(result["story"], world_state, config, model, num_ctx, output_language)
+        char_upd_task = _extract_character_states(result["story"], characters, model, num_ctx, output_language)
+        new_ws, char_updates = await asyncio.gather(new_ws_task, char_upd_task, return_exceptions=False)
         if new_ws:
             new_ws["scene"] = scene_number
             save_world_state(story_id, new_ws)
-        char_updates = await _extract_character_states(result["story"], characters, model, num_ctx, output_language)
-        for upd in char_updates:
+        for upd in (char_updates or []):
             update_character_state(
                 story_id, upd["name"],
                 current_clothing=upd.get("current_clothing"),
                 inventory=upd.get("inventory"),
                 new_experiences=upd.get("new_experiences"),
             )
-        result["world_items"] = (new_ws or world_state or {}).get("world_items", [])
-        _ws_for_meta = new_ws or world_state or {}
-        result["location"]            = _ws_for_meta.get("location", "") or ""
-        result["time"]                = _ws_for_meta.get("time", "") or ""
-        result["weather"]             = _ws_for_meta.get("weather", "") or ""
-        result["tone"]                = _ws_for_meta.get("tone", "") or ""
-        result["established_facts"]   = _ws_for_meta.get("established_facts", []) or []
-        result["characters_present"]  = _ws_for_meta.get("characters_present", []) or []
-        # Safety net: ensure at least one investigation option for unfound items/codes
-        result["options"] = _ensure_investigation_options(result["options"], new_ws or world_state, output_language)
+        _ws = new_ws or world_state or {}
+        result["world_items"]         = _ws.get("world_items", [])
+        result["location"]            = _ws.get("location", "") or ""
+        result["time"]                = _ws.get("time", "") or ""
+        result["weather"]             = _ws.get("weather", "") or ""
+        result["tone"]                = _ws.get("tone", "") or ""
+        result["established_facts"]   = _ws.get("established_facts", []) or []
+        result["characters_present"]  = _ws.get("characters_present", []) or []
+        result["options"]             = _ensure_investigation_options(result["options"], _ws, output_language)
+        result["coherence_score"]     = coherence.get("score", 10)
+        result["coherence_issues"]    = coherence.get("issues", [])
+        result["recap"]               = recap_text
+        result["interpreted_player_action"] = cleaned_action
+        await _emit("done", "✅ Fertig")
         return result
 
-    # Attempt 2: minimal fallback prompt (avoids context overflow for small models)
+    # ── Fallback: minimal prompt for tiny / overloaded models ────────────────
+    await _emit("fallback", "🔧 Fallback-Modus")
     protagonists = [c for c in characters if c.get("is_protagonist")]
     prot_name = protagonists[0]["name"] if protagonists else "der Held"
-    genre = config.get("story_genre_custom") or config.get("story_genre", "Fantasy")
     world = config.get("world_name", "eine unbekannte Welt")
     fallback_system = (
         f"Du bist ein Game Master für ein {genre}-Textadventure in {world}. "
         f"Hauptprotagonist: {prot_name}. "
-        f"Schreibe ausschließlich auf {output_language}. Antworte nur mit JSON: {{\"story\": \"...\", \"options\": [\"a\", \"b\", \"c\"]}}"
+        f"Schreibe ausschließlich auf {output_language}. "
+        f"Antworte nur mit JSON: {{\"story\": \"...\", \"options\": [\"a\", \"b\", \"c\"]}}"
     )
-    action_desc = player_action or "Beginne die Geschichte."
-    fallback_user = f"Szene {scene_number}: {action_desc}\nSchreibe 2–3 Absätze immersiven Storytime-Text auf {output_language}."
+    action_desc = cleaned_action or "Beginne die Geschichte."
+    fallback_user = (
+        f"Szene {scene_number}: {action_desc}\n"
+        f"Schreibe 2–3 Absätze immersiven Storytime-Text auf {output_language}."
+    )
     raw2 = await _call_ollama(fallback_system, fallback_user, num_predict=max(cfg_num_predict // 2, 400))
     result2 = _parse_result(raw2)
     if result2:
+        await _emit("extract", "📦 Welt aktualisieren")
         new_ws = await _extract_world_state(result2["story"], world_state, config, model, num_ctx, output_language)
         if new_ws:
             new_ws["scene"] = scene_number
@@ -941,29 +1307,38 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
                 inventory=upd.get("inventory"),
                 new_experiences=upd.get("new_experiences"),
             )
-        result2["world_items"] = (new_ws or world_state or {}).get("world_items", [])
-        _ws_for_meta2 = new_ws or world_state or {}
-        result2["location"]            = _ws_for_meta2.get("location", "") or ""
-        result2["time"]                = _ws_for_meta2.get("time", "") or ""
-        result2["weather"]             = _ws_for_meta2.get("weather", "") or ""
-        result2["tone"]                = _ws_for_meta2.get("tone", "") or ""
-        result2["established_facts"]   = _ws_for_meta2.get("established_facts", []) or []
-        result2["characters_present"]  = _ws_for_meta2.get("characters_present", []) or []
-        # Safety net: ensure at least one investigation option for unfound items/codes
-        result2["options"] = _ensure_investigation_options(result2["options"], new_ws or world_state, output_language)
+        _ws = new_ws or world_state or {}
+        result2["world_items"]         = _ws.get("world_items", [])
+        result2["location"]            = _ws.get("location", "") or ""
+        result2["time"]                = _ws.get("time", "") or ""
+        result2["weather"]             = _ws.get("weather", "") or ""
+        result2["tone"]                = _ws.get("tone", "") or ""
+        result2["established_facts"]   = _ws.get("established_facts", []) or []
+        result2["characters_present"]  = _ws.get("characters_present", []) or []
+        result2["options"]             = _ensure_investigation_options(result2["options"], _ws, output_language)
+        result2["coherence_score"]     = 0
+        result2["coherence_issues"]    = ["Fallback-Modus aktiviert"]
+        result2["recap"]               = recap_text
+        result2["interpreted_player_action"] = cleaned_action
+        await _emit("done", "✅ Fertig")
         return result2
 
-    # Last resort: return whatever we got from attempt 1
+    # Last resort
     if result:
+        await _emit("done", "✅ Fertig")
         return result
     clean = _strip_json_artifacts(raw.strip())
+    await _emit("done", "❌ Fehler")
     return {
         "story":                     clean or "Der Game Master konnte keine Antwort generieren.",
         "options":                   ["Weiter →", "Erkunde die Umgebung", "Warte und beobachte"],
         "events":                    "",
         "world_changes":             "",
         "character_updates":         "",
-        "interpreted_player_action": player_action,
+        "interpreted_player_action": cleaned_action,
+        "coherence_score":           0,
+        "coherence_issues":          ["Generierung fehlgeschlagen"],
+        "recap":                     recap_text,
     }
 
 

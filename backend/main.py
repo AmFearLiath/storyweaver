@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import json
@@ -700,6 +700,79 @@ class ResetRequest(BaseModel):
     story_id: int
 
 
+@app.post("/api/game/action-stream")
+async def process_action_stream(req: ActionRequest, user: dict = Depends(require_user)):
+    """SSE-Endpoint: streamt Pipeline-Phasen als 'phase'-Events,
+    sendet das finale Resultat als 'result'-Event, dann 'done'.
+    Frontend nutzt fetch + ReadableStream (NDJSON line-delimited)."""
+    import asyncio
+    require_story(req.story_id, user)
+    scene_number = increment_scene(req.story_id)
+
+    queue: asyncio.Queue = asyncio.Queue()
+    SENTINEL = object()
+
+    async def progress(phase: str, label: str):
+        await queue.put({"type": "phase", "phase": phase, "label": label})
+
+    async def runner():
+        try:
+            result = await generate_scene(req.action, scene_number, req.story_id, progress=progress)
+            save_event(
+                story_id=req.story_id,
+                scene_number=scene_number,
+                story_text=result.get("story", ""),
+                player_action=req.action,
+                interpreted_action=result.get("interpreted_player_action", ""),
+                events_summary=result.get("events", ""),
+                world_changes=result.get("world_changes", "keine"),
+                character_updates=result.get("character_updates", "keine"),
+                options=result.get("options", []),
+            )
+            await queue.put({
+                "type": "result",
+                "data": {
+                    "scene_number":              scene_number,
+                    "story_text":                result.get("story", ""),
+                    "events_summary":            result.get("events", ""),
+                    "world_changes":             result.get("world_changes", ""),
+                    "character_updates":         result.get("character_updates", ""),
+                    "options":                   result.get("options", []),
+                    "interpreted_player_action": result.get("interpreted_player_action", ""),
+                    "world_items":               result.get("world_items", []),
+                    "location":                  result.get("location", "") or "",
+                    "time":                      result.get("time", "") or "",
+                    "weather":                   result.get("weather", "") or "",
+                    "tone":                      result.get("tone", "") or "",
+                    "established_facts":         result.get("established_facts", []) or [],
+                    "characters_present":        result.get("characters_present", []) or [],
+                    "coherence_score":           result.get("coherence_score", 10),
+                    "coherence_issues":          result.get("coherence_issues", []),
+                    "recap":                     result.get("recap", ""),
+                },
+            })
+        except Exception as e:
+            log_llm_error("game/action-stream", e,
+                          f"story={req.story_id} scene={scene_number} action={req.action[:80]}")
+            await queue.put({"type": "error", "message": f"LLM Fehler: {str(e)}"})
+        finally:
+            await queue.put(SENTINEL)
+
+    async def stream():
+        task = asyncio.create_task(runner())
+        try:
+            while True:
+                item = await queue.get()
+                if item is SENTINEL:
+                    break
+                yield json.dumps(item, ensure_ascii=False) + "\n"
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
 @app.post("/api/game/reset")
 async def game_reset(req: ResetRequest, user: dict = Depends(require_user)):
     require_story(req.story_id, user)
@@ -736,6 +809,66 @@ async def game_undo(req: UndoRequest, user: dict = Depends(require_user)):
 
 
 # ── History ────────────────────────────────────────────────────────────────────
+
+@app.post("/api/game/repair/{story_id}")
+async def repair_story(story_id: int, user: dict = Depends(require_user)):
+    """Repariert einen verzogenen Spielzustand:
+       - Re-extrahiert World-State aus den letzten 3 Szenen
+       - Re-extrahiert NPC-Kleidung/Inventar aus den letzten 3 Szenen
+       - Entfernt abstrakte Konzepte (Energienetz, Resonanz etc.) aus world_items als obstacle
+    """
+    require_story(story_id, user)
+    from backend.llm import _extract_world_state, _extract_character_states, check_ollama_connection
+    from backend.database import get_story_config, get_characters as _get_chars, save_world_state, update_character_state
+    cfg = get_story_config(story_id)
+    chars = _get_chars(story_id)
+    llm_cfg = get_llm_config()
+    model = llm_cfg.get("ollama_model", "")
+    if not model or model == "llama3":
+        tags = await check_ollama_connection()
+        avail = tags.get("models", [])
+        model = avail[0] if avail else "llama3"
+    output_language = llm_cfg.get("output_language", "Deutsch")
+    num_ctx = int(llm_cfg.get("num_ctx", "4096"))
+
+    events = get_recent_events(story_id, limit=3)
+    if not events:
+        return {"success": False, "reason": "no_events"}
+    # Stitch last 3 scenes into one big text for re-extraction
+    big_text = "\n\n".join((ev.get("story_text") or "") for ev in events)
+    ws = get_world_state(story_id)
+    new_ws = await _extract_world_state(big_text, ws, cfg, model, num_ctx, output_language)
+    cleaned = []
+    abstract_blocklist = (
+        "energienetz", "resonanz", "aura", "chakra", "mana", "ki-energie",
+        "dreieckiges delta", "delta-energie", "fluss der zeit"
+    )
+    if new_ws and new_ws.get("world_items"):
+        for it in new_ws["world_items"]:
+            name_lc = (it.get("name") or "").lower()
+            if it.get("type") == "obstacle" and any(b in name_lc for b in abstract_blocklist):
+                continue  # drop abstract-concept obstacles
+            cleaned.append(it)
+        new_ws["world_items"] = cleaned
+        new_ws["scene"] = events[-1].get("scene_number", 0)
+        save_world_state(story_id, new_ws)
+    char_updates = await _extract_character_states(big_text, chars, model, num_ctx, output_language)
+    updated_names = []
+    for upd in (char_updates or []):
+        update_character_state(
+            story_id, upd["name"],
+            current_clothing=upd.get("current_clothing"),
+            inventory=upd.get("inventory"),
+            new_experiences=upd.get("new_experiences"),
+        )
+        updated_names.append(upd["name"])
+    return {
+        "success": True,
+        "world_state_refreshed": bool(new_ws),
+        "characters_updated":   updated_names,
+        "world_items_after":    (new_ws or {}).get("world_items", []) if new_ws else [],
+    }
+
 
 @app.get("/api/history/{story_id}")
 async def get_history(story_id: int, user: dict = Depends(require_user)):

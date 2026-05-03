@@ -1020,20 +1020,111 @@ async function processAction(action, isCustom) {
   try {
     setProcessing(true);
     document.getElementById('loadingOverlay').classList.remove('hidden');
-    const result = await api('/api/game/action', 'POST', {
-      story_id: state.currentStoryId,
-      action,
-      is_custom: isCustom,
-    });
+    _resetPipelineUI();
+    let result = null;
+    try {
+      result = await _streamAction(action, isCustom);
+    } catch (streamErr) {
+      console.warn('Streaming-Endpoint fehlgeschlagen, Fallback auf /api/game/action:', streamErr);
+      result = await api('/api/game/action', 'POST', {
+        story_id: state.currentStoryId,
+        action,
+        is_custom: isCustom,
+      });
+    }
     if (!result) return;
     renderScene(result, action);
     scrollStoryToBottom();
+    if (Array.isArray(result.coherence_issues) && result.coherence_issues.length && result.coherence_score < 6) {
+      showToast('Konsistenz-Hinweis: ' + result.coherence_issues.join(' · '), 'warning');
+    }
   } catch (e) {
     showToast('Fehler: ' + e.message, 'error');
   } finally {
     setProcessing(false);
     document.getElementById('loadingOverlay').classList.add('hidden');
   }
+}
+
+// ── Pipeline-UI Helper ────────────────────────────────────────────────────────
+function _resetPipelineUI() {
+  document.querySelectorAll('#pipelineStatus li').forEach(li => {
+    li.classList.remove('is-active', 'is-done');
+  });
+  const main = document.getElementById('loadingMainText');
+  if (main) main.textContent = 'Der Game Master schreibt...';
+}
+
+function _setPipelinePhase(phase, label) {
+  const list = document.getElementById('pipelineStatus');
+  if (!list) return;
+  // Mark previously-active phase as done
+  list.querySelectorAll('li.is-active').forEach(li => {
+    li.classList.remove('is-active');
+    li.classList.add('is-done');
+  });
+  // Activate the new phase if it exists in the UI
+  const target = list.querySelector(`li[data-phase="${phase}"]`);
+  if (target) {
+    target.classList.add('is-active');
+  }
+  // Mark all phases as done when 'done' fires
+  if (phase === 'done') {
+    list.querySelectorAll('li').forEach(li => {
+      li.classList.remove('is-active');
+      li.classList.add('is-done');
+    });
+  }
+  const main = document.getElementById('loadingMainText');
+  if (main && label) main.textContent = label;
+}
+
+async function _streamAction(action, isCustom) {
+  const headers = { 'Content-Type': 'application/json' };
+  // Reuse the same auth pattern as api()
+  if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
+  const resp = await fetch('/api/game/action-stream', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      story_id: state.currentStoryId,
+      action,
+      is_custom: isCustom,
+    }),
+  });
+  if (!resp.ok || !resp.body) {
+    throw new Error(`Stream-Fehler: HTTP ${resp.status}`);
+  }
+  const reader  = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let result = null;
+  let errMsg = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nlIdx;
+    while ((nlIdx = buffer.indexOf('\n')) !== -1) {
+      const line = buffer.slice(0, nlIdx).trim();
+      buffer = buffer.slice(nlIdx + 1);
+      if (!line) continue;
+      try {
+        const evt = JSON.parse(line);
+        if (evt.type === 'phase') {
+          _setPipelinePhase(evt.phase, evt.label);
+        } else if (evt.type === 'result') {
+          result = evt.data;
+        } else if (evt.type === 'error') {
+          errMsg = evt.message || 'Unbekannter Stream-Fehler';
+        }
+      } catch (parseErr) {
+        console.warn('Fehlerhafte NDJSON-Zeile übersprungen:', line);
+      }
+    }
+  }
+  if (errMsg) throw new Error(errMsg);
+  return result;
 }
 
 // ── World Items ───────────────────────────────────────────────────────────────
