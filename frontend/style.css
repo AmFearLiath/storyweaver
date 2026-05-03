@@ -456,9 +456,10 @@ body:not(.landing-page) { overflow: hidden; }
 /* ══ LAYOUT ══════════════════════════════════════════════════════════════════ */
 .app-layout {
   display: grid;
-  grid-template-columns: 220px 1fr 260px;
+  grid-template-columns: 260px 1fr 300px;
   height: 100vh;
   padding-top: 52px;
+  transition: grid-template-columns var(--transition-med);
 }
 
 /* ══ SIDEBAR ══════════════════════════════════════════════════════════════════ */
@@ -561,50 +562,151 @@ body:not(.landing-page) { overflow: hidden; }
 .btn-sidebar-action:hover { border-color: var(--accent-dim); color: var(--accent); background: var(--bg-hover); }
 
 /* ══ CHARACTER LIST ══════════════════════════════════════════════════════════ */
-.character-list { display: flex; flex-direction: column; gap: 5px; }
+.character-list { display: flex; flex-direction: column; gap: 6px; }
+
+/* Card-style row — kompakt aber lesbar */
 .char-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
   background: var(--bg-deep);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: all var(--transition-med);
+  position: relative;
+  overflow: hidden;
 }
-.char-row:hover { border-color: var(--accent-dim); background: var(--bg-hover); }
+.char-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: transparent;
+  transition: background var(--transition);
+}
+.char-row:hover {
+  border-color: var(--accent-dim);
+  background: var(--bg-hover);
+  transform: translateX(2px);
+}
+.char-row.is-protagonist::before { background: linear-gradient(180deg, var(--accent), var(--accent-dim)); }
+.char-row.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-dim);
+}
+.char-row.is-active::before {
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+.char-row-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.char-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px; height: 36px;
+}
+.char-avatar-thumb {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.char-avatar-placeholder { font-size: 18px; }
+.char-row.is-protagonist .char-avatar-thumb {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+/* Status-Dot rechts unten am Avatar */
 .char-status-dot {
-  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  position: absolute;
+  right: -1px; bottom: -1px;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-deep);
+  flex-shrink: 0;
 }
 .char-status-dot.alive   { background: var(--success); }
 .char-status-dot.dead    { background: var(--danger); }
 .char-status-dot.missing { background: #f09a7a; }
 .char-status-dot.unknown { background: var(--text-dim); }
-.char-prot-star { font-size: 10px; flex-shrink: 0; }
-.char-row-info { flex: 1; min-width: 0; }
-.char-row-name {
-  font-size: 13px; font-weight: 600; color: var(--text-prim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.char-row-role {
-  font-size: 10px; color: var(--text-dim);
-  text-transform: uppercase; letter-spacing: 0.05em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.char-row-edit { opacity: 0; font-size: 11px; color: var(--text-dim); transition: opacity var(--transition); flex-shrink: 0; }
-.char-row:hover .char-row-edit { opacity: 1; }
+.char-row.is-active .char-status-dot { border-color: var(--accent-soft); }
 
-/* Avatar thumb in character list */
-.char-avatar-thumb {
-  width: 32px; height: 32px; border-radius: 50%;
-  object-fit: cover; flex-shrink: 0;
-  border: 1px solid var(--border);
+.char-row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
-.char-avatar-placeholder {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: var(--bg-card); border: 1px solid var(--border);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 16px; flex-shrink: 0;
+.char-row-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-prim);
+  min-width: 0;
 }
+.char-row-name-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.char-prot-star { font-size: 11px; flex-shrink: 0; }
+.char-row-exp {
+  font-size: 9px;
+  color: var(--accent-dim);
+  flex-shrink: 0;
+  font-weight: 500;
+}
+/* Rolle als kompakter Badge */
+.char-row-role {
+  display: inline-block;
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(122,179,240,0.08);
+  color: var(--info);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  border: 1px solid rgba(122,179,240,0.2);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  align-self: flex-start;
+}
+.char-row.is-protagonist .char-row-role {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+.char-row-state {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+.char-row:hover .char-row-state { color: var(--text-sec); }
 
 /* ══ AVATAR TAB ══════════════════════════════════════════════════════════════ */
 .avatar-tab-layout {
@@ -1139,15 +1241,14 @@ body:not(.landing-page) { overflow: hidden; }
   50%     { box-shadow: 0 0 0 5px rgba(200,168,75,0);   }
 }
 
-/* ══ GM Status Bar ═══════════════════════════════════════════════════════════ */
+/* ══ GM Status Bar — als Kopfleiste über Options-Panel ══════════════════════ */
 .gm-status-bar {
   flex-shrink: 0;
-  height: 34px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
   background: var(--bg-dark);
   overflow: hidden;
   transition: border-color 0.4s, background 0.4s;
@@ -1295,7 +1396,7 @@ body:not(.landing-page) { overflow: hidden; }
     var(--bg-deep);
 }
 .story-window {
-  padding: var(--sp-7) var(--sp-6);
+  padding: var(--sp-8) var(--sp-6) var(--sp-6);
   scroll-behavior: smooth;
 }
 .story-content { max-width: 680px; margin: 0 auto; }
@@ -1349,7 +1450,8 @@ body:not(.landing-page) { overflow: hidden; }
 
 /* ── Game-like Option Buttons ────────────────────────────────────────── */
 .options-panel {
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-3) var(--sp-5) var(--sp-4);
+  border-top: none;
   background:
     linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.25) 100%),
     var(--bg-dark);
@@ -1440,50 +1542,6 @@ body:not(.landing-page) { overflow: hidden; }
   min-width: 44px;
 }
 
-/* ── Charakter-Liste: Activity Indicator + Rollen-Pill ─────────────── */
-.char-row {
-  position: relative;
-  padding: 8px 10px;
-  gap: 9px;
-  transition: all var(--transition-med);
-}
-.char-row::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 8px; bottom: 8px;
-  width: 2px;
-  border-radius: 2px;
-  background: transparent;
-  transition: background var(--transition);
-}
-.char-row.is-protagonist::before { background: var(--accent); }
-.char-row.is-active {
-  background: var(--accent-soft);
-  border-color: var(--accent-dim);
-}
-.char-row.is-active::before {
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-.char-row-name { font-size: 13px; }
-.char-row-role {
-  display: inline-block;
-  font-size: 9px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: rgba(122,179,240,0.08);
-  color: var(--info);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-top: 2px;
-  border: 1px solid rgba(122,179,240,0.2);
-}
-.char-row.is-protagonist .char-row-role {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent-dim);
-}
-
 /* ── Header: stärkerer Tiefen-Effekt ─────────────────────────────── */
 .app-header {
   background: linear-gradient(180deg, var(--bg-dark) 0%, rgba(17,21,31,0.95) 100%);
@@ -1507,9 +1565,13 @@ body:not(.landing-page) { overflow: hidden; }
 }
 
 /* ── Mobile Responsive ───────────────────────────────────────────── */
+@media (max-width: 1280px) {
+  .app-layout { grid-template-columns: 240px 1fr 260px; }
+  .story-window { padding: var(--sp-6) var(--sp-5); }
+}
 @media (max-width: 1100px) {
-  .app-layout { grid-template-columns: 200px 1fr 220px; }
-  .story-window { padding: var(--sp-5) var(--sp-4); }
+  .app-layout { grid-template-columns: 220px 1fr 240px; }
+  .panel-title { font-size: 11px; }
 }
 @media (max-width: 880px) {
   .app-layout {
@@ -1547,4 +1609,331 @@ body:not(.landing-page) { overflow: hidden; }
 .modal-content {
   background: linear-gradient(180deg, var(--bg-card) 0%, rgba(23,28,40,0.95) 100%);
   box-shadow: 0 20px 60px rgba(0,0,0,0.7), var(--shadow-glow);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   v3 — LIVING ADVENTURE HUD
+   Atmosphere-Bar, Tension-Meter, Lore-Panel, Present-Cards,
+   Story-adaptive Backgrounds, Scene-Pulse, Right-Sidebar permanent
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Story container layered over adaptive ambient background ───────── */
+.story-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.story-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%,  var(--ambient-top, rgba(200,168,75,0.04)) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, var(--ambient-bot, rgba(122,179,240,0.03)) 0%, transparent 70%);
+  transition: background 1.2s ease;
+  z-index: 0;
+}
+.story-container > * { position: relative; z-index: 1; }
+
+/* ── Atmosphere Bar ───────────────────────────────────────────────── */
+.atmosphere-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 8px var(--sp-5);
+  background: linear-gradient(180deg, rgba(13,16,24,0.88), rgba(13,16,24,0.72));
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  flex-shrink: 0;
+  animation: atmoSlideIn 0.5s ease both;
+}
+.atmosphere-bar.hidden { display: none; }
+@keyframes atmoSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.atmo-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border);
+  color: var(--text-sec);
+  transition: all var(--transition);
+  max-width: 240px;
+  overflow: hidden;
+}
+.atmo-group.is-empty { opacity: 0.4; }
+.atmo-group:hover { border-color: var(--accent-dim); color: var(--text-prim); }
+.atmo-icon { font-size: 13px; flex-shrink: 0; }
+.atmo-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+.atmo-spacer { flex: 1; }
+
+/* ── Tension Meter ────────────────────────────────────────────────── */
+.atmo-tension {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border);
+}
+.tension-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+}
+.tension-bars {
+  display: inline-flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 14px;
+}
+.tension-bars span {
+  display: block;
+  width: 4px;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background 0.5s, height 0.5s, box-shadow 0.5s;
+}
+.tension-bars span:nth-child(1) { height: 35%; }
+.tension-bars span:nth-child(2) { height: 50%; }
+.tension-bars span:nth-child(3) { height: 65%; }
+.tension-bars span:nth-child(4) { height: 80%; }
+.tension-bars span:nth-child(5) { height: 100%; }
+.atmo-tension[data-level="calm"]      .tension-bars span:nth-child(-n+1) { background: var(--success); }
+.atmo-tension[data-level="low"]       .tension-bars span:nth-child(-n+2) { background: #b6c75a; }
+.atmo-tension[data-level="medium"]    .tension-bars span:nth-child(-n+3) { background: var(--accent); box-shadow: 0 0 4px var(--accent-glow); }
+.atmo-tension[data-level="high"]      .tension-bars span:nth-child(-n+4) { background: #f09a4a; box-shadow: 0 0 5px rgba(240,154,74,0.5); }
+.atmo-tension[data-level="critical"]  .tension-bars span:nth-child(-n+5) { background: var(--danger); box-shadow: 0 0 6px rgba(220,90,90,0.7); }
+.atmo-tension[data-level="critical"]  .tension-label { color: var(--danger); animation: tensionFlash 1.4s ease-in-out infinite; }
+@keyframes tensionFlash { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ── Story-Adaptive Body Backgrounds (Time + Weather) ──────────────── */
+body.time-dawn   { --ambient-top: rgba(255,170,120,0.07); --ambient-bot: rgba(255,200,150,0.05); }
+body.time-day    { --ambient-top: rgba(200,168,75,0.05);  --ambient-bot: rgba(122,179,240,0.04); }
+body.time-dusk   { --ambient-top: rgba(180,90,140,0.08);  --ambient-bot: rgba(80,40,90,0.06); }
+body.time-night  { --ambient-top: rgba(60,90,160,0.06);   --ambient-bot: rgba(20,30,80,0.05); }
+
+/* Stronger storm — dim + flicker */
+body.weather-storm .story-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(80,60,160,0.04);
+  pointer-events: none;
+  animation: stormFlicker 6s ease-in-out infinite;
+  z-index: 0;
+}
+@keyframes stormFlicker {
+  0%,93%,100% { opacity: 0; }
+  94%,96%     { opacity: 1; }
+  95%         { opacity: 0.5; }
+}
+/* Rain — subtle vertical streak overlay */
+body.weather-rain .story-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      105deg,
+      transparent 0 14px,
+      rgba(122,179,240,0.04) 14px 15px
+    );
+  pointer-events: none;
+  animation: rainFall 1.8s linear infinite;
+  z-index: 0;
+}
+@keyframes rainFall { from { background-position: 0 0; } to { background-position: -60px 200px; } }
+/* Fog — drifting horizontal mist */
+body.weather-fog .story-container::after {
+  content: '';
+  position: absolute;
+  inset: -20% 0;
+  background: radial-gradient(ellipse 80% 30% at 50% 50%, rgba(180,200,220,0.06) 0%, transparent 70%);
+  pointer-events: none;
+  animation: fogDrift 18s ease-in-out infinite alternate;
+  z-index: 0;
+}
+@keyframes fogDrift { from { transform: translateX(-12%); } to { transform: translateX(12%); } }
+/* Snow — soft particles via dotted radial */
+body.weather-snow .story-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle 1px at 20% 10%, rgba(255,255,255,0.4), transparent 2px),
+    radial-gradient(circle 1px at 70% 35%, rgba(255,255,255,0.3), transparent 2px),
+    radial-gradient(circle 1.5px at 40% 65%, rgba(255,255,255,0.5), transparent 2px),
+    radial-gradient(circle 1px at 85% 80%, rgba(255,255,255,0.35), transparent 2px);
+  background-size: 220px 220px;
+  pointer-events: none;
+  animation: snowFall 14s linear infinite;
+  z-index: 0;
+}
+@keyframes snowFall { from { background-position: 0 0; } to { background-position: 0 220px; } }
+
+/* Tension intensifies pulse on header indicator */
+body.tension-high  .gm-pulse,
+body.tension-critical .gm-pulse {
+  background: var(--danger);
+  box-shadow: 0 0 8px rgba(220,90,90,0.8);
+  animation-duration: 0.8s;
+}
+
+/* ── Scene Counter Pulse on new scene ──────────────────────────────── */
+.scene-badge.scene-pulse {
+  animation: scenePulse 0.9s ease;
+}
+@keyframes scenePulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(200,168,75,0.6); }
+  40%  { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(200,168,75,0); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(200,168,75,0); }
+}
+
+/* ── HUD Panels (Right Sidebar) ───────────────────────────────────── */
+.sidebar-right {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.hud-panel { position: relative; }
+.hud-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.panel-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  letter-spacing: 0.04em;
+}
+.hud-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 8px 6px;
+  text-align: center;
+  opacity: 0.65;
+}
+
+/* ── Lore List ────────────────────────────────────────────────────── */
+.lore-list { display: flex; flex-direction: column; gap: 4px; }
+.lore-entry {
+  display: flex;
+  gap: 7px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-sec);
+  border-left: 2px solid var(--border-glow);
+  background: rgba(255,255,255,0.015);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  animation: loreFadeIn 0.4s ease both;
+}
+.lore-entry:hover { color: var(--text-prim); border-left-color: var(--accent-dim); background: rgba(200,168,75,0.04); }
+.lore-bullet { color: var(--accent-dim); flex-shrink: 0; font-size: 9px; line-height: 1.7; }
+.lore-text { flex: 1; }
+@keyframes loreFadeIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Present-In-Scene Characters ──────────────────────────────────── */
+.present-list { display: flex; flex-direction: column; gap: 5px; }
+.present-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  animation: loreFadeIn 0.35s ease both;
+  position: relative;
+}
+.present-row.is-protagonist { border-color: var(--accent-dim); background: var(--accent-soft); }
+.present-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.present-avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.present-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.present-name {
+  font-size: 12px; font-weight: 600; color: var(--text-prim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.present-role {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.present-pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+  animation: presentPulse 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes presentPulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%     { opacity: 0.55; transform: scale(0.8); }
+}
+
+/* ── Char-Row "is-present" highlight ──────────────────────────────── */
+.char-row.is-present {
+  border-color: var(--success);
+  box-shadow: 0 0 0 1px rgba(75,200,132,0.25), 0 0 12px rgba(75,200,132,0.08);
+}
+.char-row.is-present .char-row-name-text::after {
+  content: '◉';
+  color: var(--success);
+  font-size: 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: presentPulse 1.8s ease-in-out infinite;
+}
+
+/* ── Reduced motion respect ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body.weather-storm .story-container::after,
+  body.weather-rain  .story-container::after,
+  body.weather-fog   .story-container::after,
+  body.weather-snow  .story-container::after { animation: none; }
+  .scene-badge.scene-pulse,
+  .present-pulse,
+  .char-row.is-present .char-row-name-text::after { animation: none; }
 }

@@ -891,6 +891,12 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
                 new_experiences=upd.get("new_experiences"),
             )
         result["world_items"] = (new_ws or world_state or {}).get("world_items", [])
+        _ws_for_meta = new_ws or world_state or {}
+        result["location"]            = _ws_for_meta.get("location", "") or ""
+        result["time"]                = _ws_for_meta.get("time", "") or ""
+        result["weather"]             = _ws_for_meta.get("weather", "") or ""
+        result["established_facts"]   = _ws_for_meta.get("established_facts", []) or []
+        result["characters_present"]  = _ws_for_meta.get("characters_present", []) or []
         # Safety net: ensure at least one investigation option for unfound items/codes
         result["options"] = _ensure_investigation_options(result["options"], new_ws or world_state, output_language)
         return result
@@ -923,6 +929,12 @@ async def generate_scene(player_action: str, scene_number: int, story_id: int) -
                 new_experiences=upd.get("new_experiences"),
             )
         result2["world_items"] = (new_ws or world_state or {}).get("world_items", [])
+        _ws_for_meta2 = new_ws or world_state or {}
+        result2["location"]            = _ws_for_meta2.get("location", "") or ""
+        result2["time"]                = _ws_for_meta2.get("time", "") or ""
+        result2["weather"]             = _ws_for_meta2.get("weather", "") or ""
+        result2["established_facts"]   = _ws_for_meta2.get("established_facts", []) or []
+        result2["characters_present"]  = _ws_for_meta2.get("characters_present", []) or []
         # Safety net: ensure at least one investigation option for unfound items/codes
         result2["options"] = _ensure_investigation_options(result2["options"], new_ws or world_state, output_language)
         return result2

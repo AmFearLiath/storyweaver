@@ -20,6 +20,7 @@ const state = {
   worldItems: [],
   currentAvatarFile: null,
   lastActiveCharName: null,
+  presentNames: [],
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -395,30 +396,41 @@ function renderCharacters(chars) {
   if (!el) return;
   if (!chars.length) { el.innerHTML = '<p style="color:var(--text-dim);font-size:12px;padding:4px">Noch keine Charaktere.</p>'; return; }
   el.innerHTML = chars.map(c => {
-    const st = c.status || 'alive';
-    const prot = c.is_protagonist ? '<span class="char-prot-star" title="Hauptprotagonist">⭐</span>' : '';
-    const inv = Array.isArray(c.inventory) ? c.inventory : [];
-    const exp = Array.isArray(c.experiences) ? c.experiences : [];
-    const cc  = (c.current_clothing || '').trim();
+    const st   = c.status || 'alive';
+    const role = (c.role || '').trim();
+    const inv  = Array.isArray(c.inventory) ? c.inventory : [];
+    const exp  = Array.isArray(c.experiences) ? c.experiences : [];
+    const cc   = (c.current_clothing || '').trim();
+    // Compact state summary (max ~28 chars)
     let stateLine = '';
-    if (cc) stateLine = cc.length > 32 ? cc.slice(0, 30) + '…' : cc;
-    else if (inv.length) stateLine = `🎒 ${inv.length} Gegenstand${inv.length !== 1 ? 'stände' : ''}`;
-    const expBadge = exp.length ? `<span title="${exp.length} Erfahrung(en)" style="font-size:10px;color:var(--accent-dim)">✦${exp.length}</span>` : '';
-    const avatarHtml = c.avatar_path
+    if (cc)             stateLine = cc.length > 28 ? cc.slice(0, 26) + '…' : cc;
+    else if (inv.length) stateLine = `${inv.length} Gegenstand${inv.length !== 1 ? 'e' : ''}`;
+    const expBadge = exp.length ? `<span class="char-row-exp" title="${exp.length} Erfahrung(en)">✦${exp.length}</span>` : '';
+    const avatar = c.avatar_path
       ? `<img src="${esc(c.avatar_path)}" class="char-avatar-thumb" alt="${esc(c.name)}" />`
       : `<span class="char-avatar-thumb char-avatar-placeholder">👤</span>`;
-    const rowCls = `char-row${c.is_protagonist ? ' is-protagonist' : ''}${state.lastActiveCharName === c.name ? ' is-active' : ''}`;
+    const roleBadge = role
+      ? `<span class="char-row-role" title="${esc(role)}">${esc(role.length > 16 ? role.slice(0, 14) + '…' : role)}</span>`
+      : '';
+    const isPresent = state.presentNames && state.presentNames.includes((c.name || '').toLowerCase());
+    const cls = `char-row${c.is_protagonist ? ' is-protagonist' : ''}${state.lastActiveCharName === c.name ? ' is-active' : ''}${isPresent ? ' is-present' : ''}`;
     return `
-      <div class="${rowCls}" onclick="openCharModalEdit(${c.id})">
-        ${avatarHtml}
-        <span class="char-status-dot ${st}" title="${st}"></span>
-        ${prot}
-        <div class="char-row-info">
-          <div class="char-row-name">${esc(c.name)} ${expBadge}</div>
-          <div class="char-row-role">${esc(c.role || '')}</div>
-          ${stateLine ? `<div class="char-row-state">${esc(stateLine)}</div>` : ''}
+      <div class="${cls}" onclick="openCharModalEdit(${c.id})" title="${esc(c.name)}">
+        <div class="char-row-top">
+          <div class="char-avatar-wrap">
+            ${avatar}
+            <span class="char-status-dot ${st}" title="${st}"></span>
+          </div>
+          <div class="char-row-info">
+            <div class="char-row-name">
+              ${c.is_protagonist ? '<span class="char-prot-star" title="Hauptprotagonist">⭐</span>' : ''}
+              <span class="char-row-name-text">${esc(c.name)}</span>
+              ${expBadge}
+            </div>
+            ${roleBadge}
+          </div>
         </div>
-        <span class="char-row-edit">✏️</span>
+        ${stateLine ? `<div class="char-row-state">${esc(stateLine)}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -885,6 +897,13 @@ async function loadGameState() {
       document.getElementById('optionsPanel').classList.remove('hidden');
       renderStoryEntries(gs.events);
       renderWorldItems(gs.world_items || []);
+      applyWorldAtmosphere({
+        location:           gs.location,
+        time:               gs.time,
+        weather:            gs.weather,
+        established_facts:  gs.established_facts,
+        characters_present: gs.characters_present,
+      });
       scrollStoryToBottom();
       // Last options
       const lastEvent = gs.events[gs.events.length - 1];
@@ -977,14 +996,130 @@ async function processAction(action, isCustom) {
 // ── World Items ───────────────────────────────────────────────────────────────
 function renderWorldItems(items) {
   state.worldItems = items || [];
-  const emptyEl       = document.getElementById('sidebarRightEmpty');
   const itemItems     = state.worldItems.filter(i => (i.type || 'item') === 'item');
   const codeItems     = state.worldItems.filter(i => i.type === 'code');
   const obstacleItems = state.worldItems.filter(i => i.type === 'obstacle');
-  _renderWorldPanel('rightItemsPanel',     'rightItemsList',     itemItems);
-  _renderWorldPanel('rightCodesPanel',     'rightCodesList',     codeItems);
-  _renderWorldPanel('rightObstaclesPanel', 'rightObstaclesList', obstacleItems);
-  if (emptyEl) emptyEl.style.display = state.worldItems.length ? 'none' : '';
+  _renderWorldPanel('rightItemsPanel',     'rightItemsList',     itemItems,     'Keine Gegenstände gesammelt');
+  _renderWorldPanel('rightCodesPanel',     'rightCodesList',     codeItems,     'Noch keine Codes entdeckt');
+  _renderWorldPanel('rightObstaclesPanel', 'rightObstaclesList', obstacleItems, 'Keine bekannten Hindernisse');
+  // Counts
+  const setCount = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
+  setCount('itemsCount',     itemItems.length);
+  setCount('codesCount',     codeItems.length);
+  setCount('obstaclesCount', obstacleItems.length);
+  // Tension level from active/triggered obstacles
+  _updateTension(obstacleItems);
+}
+
+// ── Atmosphere & Story-Adaptive Theming ──────────────────────────────────────
+function applyWorldAtmosphere(meta) {
+  // meta = {location, time, weather, established_facts, characters_present}
+  const bar = document.getElementById('atmosphereBar');
+  if (bar) bar.classList.remove('hidden');
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const txt = el.querySelector('.atmo-text');
+    if (txt) txt.textContent = (val && String(val).trim()) || '—';
+    el.classList.toggle('is-empty', !(val && String(val).trim()));
+  };
+  set('atmoLocation', meta.location);
+  set('atmoTime',     meta.time);
+  set('atmoWeather',  meta.weather);
+
+  // Adaptive body classes: time + weather
+  const body = document.body;
+  // Strip previous theme classes
+  Array.from(body.classList).forEach(c => {
+    if (c.startsWith('time-') || c.startsWith('weather-')) body.classList.remove(c);
+  });
+  const t = (meta.time || '').toLowerCase();
+  if      (/(morgen|sonnenaufgang|dawn|dämmer)/.test(t))                body.classList.add('time-dawn');
+  else if (/(mittag|tag|nachmittag|noon|day|midday)/.test(t))           body.classList.add('time-day');
+  else if (/(abend|sonnenuntergang|dusk|twilight|crepuscul)/.test(t))   body.classList.add('time-dusk');
+  else if (/(nacht|mitternacht|night)/.test(t))                         body.classList.add('time-night');
+  const w = (meta.weather || '').toLowerCase();
+  if      (/(sturm|gewitter|storm|thunder)/.test(w))                    body.classList.add('weather-storm');
+  else if (/(regen|nass|rain|drizzle)/.test(w))                         body.classList.add('weather-rain');
+  else if (/(nebel|dunst|fog|mist|smoke|rauch)/.test(w))                body.classList.add('weather-fog');
+  else if (/(schnee|frost|snow|ice|eis)/.test(w))                       body.classList.add('weather-snow');
+  else if (/(klar|sonnig|warm|clear|sunny)/.test(w))                    body.classList.add('weather-clear');
+
+  // Facts → Lore panel
+  renderLoreFacts(Array.isArray(meta.established_facts) ? meta.established_facts : []);
+  // Present → Present panel + character glow
+  const present = Array.isArray(meta.characters_present) ? meta.characters_present : [];
+  renderPresentCharacters(present);
+  state.presentNames = present.map(n => String(n).toLowerCase());
+  // Re-render character cards to apply is-present highlight
+  if (typeof renderCharacters === 'function' && Array.isArray(state.characters)) {
+    renderCharacters(state.characters);
+  }
+}
+
+function renderLoreFacts(facts) {
+  const list = document.getElementById('rightLoreList');
+  const cnt  = document.getElementById('loreCount');
+  if (cnt) cnt.textContent = facts.length;
+  if (!list) return;
+  if (!facts.length) { list.innerHTML = '<div class="hud-empty">Etablierte Fakten erscheinen hier</div>'; return; }
+  // Newest at top, max 12 to avoid bloat
+  const recent = facts.slice(-12).reverse();
+  list.innerHTML = recent.map((f, i) => `
+    <div class="lore-entry" style="animation-delay:${i * 0.04}s">
+      <span class="lore-bullet">◆</span>
+      <span class="lore-text">${esc(String(f))}</span>
+    </div>`).join('');
+}
+
+function renderPresentCharacters(names) {
+  const list = document.getElementById('rightPresentList');
+  const cnt  = document.getElementById('presentCount');
+  if (cnt) cnt.textContent = names.length;
+  if (!list) return;
+  if (!names.length) { list.innerHTML = '<div class="hud-empty">Keine Anwesenden bekannt</div>'; return; }
+  // Match against known characters for avatar
+  const knownByName = {};
+  (state.characters || []).forEach(c => { if (c.name) knownByName[c.name.toLowerCase()] = c; });
+  list.innerHTML = names.map((n, i) => {
+    const known = knownByName[String(n).toLowerCase()];
+    const avatar = known && known.avatar_path
+      ? `<img src="${esc(known.avatar_path)}" class="present-avatar" alt="${esc(n)}" />`
+      : `<span class="present-avatar present-avatar-placeholder">${esc(String(n).charAt(0).toUpperCase())}</span>`;
+    const role = known && known.role ? `<span class="present-role">${esc(known.role)}</span>` : '';
+    const isProt = known && known.is_protagonist ? ' is-protagonist' : '';
+    return `<div class="present-row${isProt}" style="animation-delay:${i * 0.05}s" title="${esc(n)}">
+      ${avatar}
+      <div class="present-info">
+        <span class="present-name">${esc(n)}</span>${role}
+      </div>
+      <span class="present-pulse"></span>
+    </div>`;
+  }).join('');
+}
+
+function _updateTension(obstacles) {
+  const el = document.getElementById('atmoTension');
+  if (!el) return;
+  // Score: triggered=2, active=1, others=0  → cap at 5
+  const score = obstacles.reduce((s, o) => {
+    if (o.status === 'triggered') return s + 2;
+    if (o.status === 'active' || !o.status) return s + 1;
+    return s;
+  }, 0);
+  const lvl = Math.min(5, score);
+  let label;
+  if      (lvl <= 0) label = 'calm';
+  else if (lvl <= 1) label = 'low';
+  else if (lvl <= 2) label = 'medium';
+  else if (lvl <= 3) label = 'high';
+  else               label = 'critical';
+  el.dataset.level = label;
+  el.dataset.fill  = String(lvl);
+  document.body.dataset.tension = label;
+  // Toggle pulse class on body for ambient animation intensity
+  document.body.classList.toggle('tension-critical', label === 'critical');
+  document.body.classList.toggle('tension-high',     label === 'high');
 }
 
 function _buildItemHtml(item) {
@@ -1043,12 +1178,15 @@ function _buildItemHtml(item) {
   </div>`;
 }
 
-function _renderWorldPanel(panelId, listId, items) {
+function _renderWorldPanel(panelId, listId, items, emptyText) {
   const panel = document.getElementById(panelId);
   const list  = document.getElementById(listId);
   if (!panel || !list) return;
-  if (!items.length) { panel.style.display = 'none'; list.innerHTML = ''; return; }
-  panel.style.display = '';
+  panel.style.display = ''; // always visible — show empty state instead
+  if (!items.length) {
+    list.innerHTML = `<div class="hud-empty">${esc(emptyText || 'Leer')}</div>`;
+    return;
+  }
   const order = { triggered: 0, active: 1, available: 2, held: 3, unknown: 2, found: 2, used: 4, overcome: 5, avoided: 5 };
   const sorted = [...items].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
   list.innerHTML = sorted.map(_buildItemHtml).join('');
@@ -1176,6 +1314,17 @@ function renderScene(result, playerAction) {
   if (result.world_items !== undefined) {
     renderWorldItems(result.world_items);
   }
+  // Atmosphere & adaptive theming
+  applyWorldAtmosphere({
+    location:           result.location,
+    time:               result.time,
+    weather:            result.weather,
+    established_facts:  result.established_facts,
+    characters_present: result.characters_present,
+  });
+  // Trigger scene-pulse on header counter
+  const sb = document.getElementById('sceneBadge');
+  if (sb) { sb.classList.remove('scene-pulse'); void sb.offsetWidth; sb.classList.add('scene-pulse'); }
 }
 
 function renderStoryEntries(events) {
@@ -1231,6 +1380,11 @@ async function confirmReset() {
     document.getElementById('sceneBadge').textContent = 'Szene 0';
     const hint = document.getElementById('startHint');
     if (hint) hint.textContent = '';
+    // Reset atmosphere & HUD
+    applyWorldAtmosphere({ location:'', time:'', weather:'', established_facts:[], characters_present:[] });
+    renderWorldItems([]);
+    const atmoBar = document.getElementById('atmosphereBar');
+    if (atmoBar) atmoBar.classList.add('hidden');
     showToast('Spiel zurückgesetzt.');
   } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
 }
@@ -1377,7 +1531,7 @@ function setGmStatus(status) {
   if (text) {
     if (status === 'thinking') text.textContent = 'Game Master schreibt…';
     else if (status === 'done') text.textContent = 'Szene bereit';
-    else text.textContent = 'Bereit';
+    else text.textContent = 'Bereit · Deine Entscheidung';
   }
   if (status === 'done') {
     clearTimeout(setGmStatus._timer);

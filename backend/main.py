@@ -599,6 +599,11 @@ async def game_state(story_id: int, user: dict = Depends(require_user)):
         "characters": characters,
         "story": story,
         "world_items": world_state.get("world_items", []),
+        "location":            world_state.get("location", "") or "",
+        "time":                world_state.get("time", "") or "",
+        "weather":             world_state.get("weather", "") or "",
+        "established_facts":   world_state.get("established_facts", []) or [],
+        "characters_present":  world_state.get("characters_present", []) or [],
     }
 
 
@@ -636,6 +641,11 @@ async def start_game(req: StartRequest, user: dict = Depends(require_user)):
         "options":                   result.get("options", []),
         "interpreted_player_action": result.get("interpreted_player_action", ""),
         "world_items":               result.get("world_items", []),
+        "location":                  result.get("location", "") or "",
+        "time":                      result.get("time", "") or "",
+        "weather":                   result.get("weather", "") or "",
+        "established_facts":         result.get("established_facts", []) or [],
+        "characters_present":        result.get("characters_present", []) or [],
     }
 
 
@@ -675,6 +685,11 @@ async def process_action(req: ActionRequest, user: dict = Depends(require_user))
         "options":                   result.get("options", []),
         "interpreted_player_action": result.get("interpreted_player_action", ""),
         "world_items":               result.get("world_items", []),
+        "location":                  result.get("location", "") or "",
+        "time":                      result.get("time", "") or "",
+        "weather":                   result.get("weather", "") or "",
+        "established_facts":         result.get("established_facts", []) or [],
+        "characters_present":        result.get("characters_present", []) or [],
     }
 
 

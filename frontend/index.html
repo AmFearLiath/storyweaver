@@ -66,6 +66,24 @@
   <!-- ── STORY CENTER ───────────────────────────────────────────────────── -->
   <div class="story-container">
 
+    <!-- Atmosphere Bar — Ort, Zeit, Wetter + Spannungs-Anzeige -->
+    <div id="atmosphereBar" class="atmosphere-bar hidden">
+      <div class="atmo-group atmo-location" id="atmoLocation" title="Aktueller Ort">
+        <span class="atmo-icon">📍</span><span class="atmo-text">—</span>
+      </div>
+      <div class="atmo-group atmo-time" id="atmoTime" title="Tageszeit">
+        <span class="atmo-icon">🕐</span><span class="atmo-text">—</span>
+      </div>
+      <div class="atmo-group atmo-weather" id="atmoWeather" title="Wetter / Atmosphäre">
+        <span class="atmo-icon">🌤️</span><span class="atmo-text">—</span>
+      </div>
+      <div class="atmo-spacer"></div>
+      <div class="atmo-tension" id="atmoTension" data-level="calm" title="Spannungsstufe">
+        <span class="tension-label">Spannung</span>
+        <div class="tension-bars"><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+    </div>
+
     <!-- Start Screen -->
     <div id="startScreen" class="start-screen">
       <div class="start-content">
@@ -88,17 +106,16 @@
       </div>
     </div>
 
-    <!-- GM Status Bar — immer sichtbar -->
+    <!-- GM Status Bar — fest am oberen Rand des Aktions-Panels -->
     <div id="gmStatusBar" class="gm-status-bar" data-status="idle">
       <div class="gm-status-inner">
         <div class="gm-dots"><span></span><span></span><span></span></div>
-        <span id="gmStatusText" class="gm-status-text">Bereit</span>
+        <span id="gmStatusText" class="gm-status-text">Bereit · Deine Entscheidung</span>
       </div>
     </div>
 
     <!-- Options Panel -->
     <div id="optionsPanel" class="options-panel hidden">
-      <h4 class="options-title">Deine Entscheidung</h4>
       <div id="optionButtons" class="option-buttons"></div>
       <div class="free-input-section">
         <div class="free-input-row">
@@ -112,28 +129,57 @@
 
   <!-- ── RECHTE SIDEBAR ────────────────────────────────────────────────── -->
   <aside class="sidebar sidebar-right">
-    <div class="sidebar-right-empty" id="sidebarRightEmpty">
-      <span>🌍</span>
-      <p>Weltgegenstände erscheinen<br/>während des Spiels</p>
-    </div>
-    <section class="panel" id="rightItemsPanel" style="display:none">
+
+    <section class="panel hud-panel" id="rightPresentPanel">
       <div class="panel-header">
-        <h3 class="panel-title">📦 Gegenstände</h3>
+        <h3 class="panel-title">🎭 Anwesend</h3>
+        <span class="panel-count" id="presentCount">0</span>
       </div>
-      <div id="rightItemsList" class="world-items-list"></div>
+      <div id="rightPresentList" class="present-list">
+        <div class="hud-empty">Keine Anwesenden bekannt</div>
+      </div>
     </section>
-    <section class="panel" id="rightCodesPanel" style="display:none">
+
+    <section class="panel hud-panel" id="rightItemsPanel">
       <div class="panel-header">
-        <h3 class="panel-title">🔑 Zugangscodes</h3>
+        <h3 class="panel-title">📦 Inventar</h3>
+        <span class="panel-count" id="itemsCount">0</span>
       </div>
-      <div id="rightCodesList" class="world-items-list"></div>
+      <div id="rightItemsList" class="world-items-list">
+        <div class="hud-empty">Keine Gegenstände gesammelt</div>
+      </div>
     </section>
-    <section class="panel" id="rightObstaclesPanel" style="display:none">
+
+    <section class="panel hud-panel" id="rightCodesPanel">
       <div class="panel-header">
-        <h3 class="panel-title">⚠️ Hindernisse</h3>
+        <h3 class="panel-title">🔑 Codes &amp; Schlüssel</h3>
+        <span class="panel-count" id="codesCount">0</span>
       </div>
-      <div id="rightObstaclesList" class="world-items-list"></div>
+      <div id="rightCodesList" class="world-items-list">
+        <div class="hud-empty">Noch keine Codes entdeckt</div>
+      </div>
     </section>
+
+    <section class="panel hud-panel" id="rightObstaclesPanel">
+      <div class="panel-header">
+        <h3 class="panel-title">⚠️ Bedrohungen</h3>
+        <span class="panel-count" id="obstaclesCount">0</span>
+      </div>
+      <div id="rightObstaclesList" class="world-items-list">
+        <div class="hud-empty">Keine bekannten Hindernisse</div>
+      </div>
+    </section>
+
+    <section class="panel hud-panel" id="rightLorePanel">
+      <div class="panel-header">
+        <h3 class="panel-title">📜 Lore</h3>
+        <span class="panel-count" id="loreCount">0</span>
+      </div>
+      <div id="rightLoreList" class="lore-list">
+        <div class="hud-empty">Etablierte Fakten erscheinen hier</div>
+      </div>
+    </section>
+
   </aside>
 
 </main>

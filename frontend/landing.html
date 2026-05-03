@@ -14,7 +14,9 @@
   ═══════════════════════════════════════════════════════════════════════════ */
 
   /* ── Base ─────────────────────────────────────────────────────────────── */
-  .mkt-page { overflow-x: hidden; }
+  /* Override game-layout height constraints — landing page needs natural scroll */
+  html { height: auto !important; }
+  body.mkt-page { height: auto !important; min-height: 100vh; overflow-y: auto; overflow-x: hidden; }
 
   /* ── Nav ──────────────────────────────────────────────────────────────── */
   .mkt-nav {
@@ -152,13 +154,13 @@
   .mkt-p + .mkt-p { margin-top: 13px; }
 
   /* ── Section: Game Master (split, L text / R terminal) ───────────────── */
-  .mkt-gm { display: grid; grid-template-columns: 1fr 1.65fr; }
+  .mkt-gm { display: grid; grid-template-columns: 1fr 1.4fr; }
   .mkt-gm-left {
-    background: var(--bg-dark); padding: 90px 64px;
+    background: var(--bg-dark); padding: 90px 72px;
     display: flex; flex-direction: column; justify-content: center;
     border-right: 1px solid var(--border);
   }
-  .mkt-gm-right { background: var(--bg-deep); padding: 70px 60px; display: flex; align-items: center; }
+  .mkt-gm-right { background: var(--bg-deep); padding: 70px 60px; display: flex; align-items: center; justify-content: center; }
 
   /* Terminal mockup */
   .mkt-terminal {
@@ -219,15 +221,15 @@
   .mkt-wi-name.clr-done { color: var(--text-dim); text-decoration: line-through; }
 
   /* ── Section: Charaktere (reversed split, R text / L card) ──────────── */
-  .mkt-chars { display: grid; grid-template-columns: 1.3fr 1fr; }
-  .mkt-chars-left { background: var(--bg-deep); padding: 80px 64px; display: flex; align-items: center; }
+  .mkt-chars { display: grid; grid-template-columns: 1fr 1.2fr; }
+  .mkt-chars-left { background: var(--bg-deep); padding: 80px 64px; display: flex; align-items: center; justify-content: center; }
   .mkt-chars-right {
-    background: var(--bg-card); padding: 80px 60px;
+    background: var(--bg-card); padding: 80px 72px;
     display: flex; flex-direction: column; justify-content: center;
     border-left: 1px solid var(--border);
   }
   .mkt-char-card {
-    width: 100%; max-width: 400px;
+    width: 100%; max-width: 380px;
     background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
   }
   .mkt-char-top { background: var(--bg-dark); padding: 18px 22px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); }
@@ -305,7 +307,7 @@
     .mkt-nav { padding: 0 20px; height: 58px; }
     .mkt-gm, .mkt-chars { grid-template-columns: 1fr; }
     .mkt-gm-left, .mkt-chars-right { padding: 52px 28px; }
-    .mkt-gm-right, .mkt-chars-left { padding: 40px 28px; }
+    .mkt-gm-right, .mkt-chars-left { padding: 40px 28px; justify-content: flex-start; }
     .mkt-world-panels { grid-template-columns: 1fr; }
     .mkt-ctrl-strip { flex-direction: column; gap: 0; }
     .mkt-world, .mkt-setup, .mkt-control { padding-left: 24px; padding-right: 24px; }
