@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688?logo=fastapi)
 ![Ollama](https://img.shields.io/badge/Ollama-lokal-black)
-![License](https://img.shields.io/badge/Lizenz-MIT-green)
+![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
 ---
 
