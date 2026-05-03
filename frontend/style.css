@@ -776,7 +776,7 @@ body:not(.landing-page) { overflow: hidden; }
   font-size: 12px; color: var(--text-sec); line-height: 1.7;
 }
 .loading-overlay {
-  position: absolute; inset: 0;
+  position: fixed; inset: 0;
   background: rgba(10,12,18,0.85);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px; color: var(--text-sec); font-size: 15px;
@@ -827,6 +827,7 @@ body:not(.landing-page) { overflow: hidden; }
 .options-panel {
   background: var(--bg-dark); border-top: 1px solid var(--border);
   padding: 16px 22px; flex-shrink: 0;
+  z-index: 0 !important;
 }
 .options-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-sec); margin-bottom: 10px; }
 .option-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -1687,6 +1688,39 @@ body:not(.landing-page) { overflow: hidden; }
 @keyframes atmoSlideIn {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Story-Direktive (Director-System) ──────────────────────────────── */
+.directive-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--sp-5);
+  background: linear-gradient(90deg, rgba(255,184,76,0.12), rgba(255,184,76,0.04) 60%, transparent);
+  border-bottom: 1px solid rgba(255,184,76,0.25);
+  font-size: 13px;
+  flex-shrink: 0;
+  animation: atmoSlideIn 0.4s ease both;
+}
+.directive-bar.hidden { display: none; }
+.directive-icon { font-size: 16px; filter: drop-shadow(0 0 4px rgba(255,184,76,0.6)); }
+.directive-beat {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(255,184,76,0.12);
+  border: 1px solid rgba(255,184,76,0.4);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.directive-beat:empty { display: none; }
+.directive-text {
+  color: var(--text-pri);
+  flex: 1;
+  font-style: italic;
+  line-height: 1.4;
 }
 .atmo-group {
   display: inline-flex;

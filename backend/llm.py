@@ -104,6 +104,103 @@ def _genre_anti_drift_block(genre: str) -> str:
     )
 
 
+# ── Locked Identifiers (Anti Name-Drift) ─────────────────────────────────────
+def _build_locked_glossary(
+    world_state: dict | None,
+    characters: list | None = None,
+) -> str:
+    """Compact list of canonical proper names that sub-LLMs must never alter.
+    Includes character names, current location, world items.
+    Designed to be injected into all sub-prompts where the LLM might shorten or
+    misspell a name (e.g. 'Annika' → 'Anna')."""
+    names: list[str] = []
+    seen = set()
+
+    def add(n: str):
+        if not n:
+            return
+        n = str(n).strip()
+        if not n or n.lower() in seen:
+            return
+        seen.add(n.lower())
+        names.append(n)
+
+    for c in characters or []:
+        add(c.get("name", ""))
+    if world_state:
+        for n in world_state.get("characters_present", []) or []:
+            add(n)
+        add(world_state.get("location", ""))
+        for it in world_state.get("world_items", []) or []:
+            if isinstance(it, dict):
+                add(it.get("name", ""))
+                add(it.get("held_by", ""))
+
+    if not names:
+        return ""
+    listed = "; ".join(f'"{n}"' for n in names[:25])
+    return (
+        "🔒 EXAKTE EIGENNAMEN — niemals ändern, kürzen oder umbenennen:\n"
+        f"   {listed}\n"
+    )
+
+
+# ── Obstacle-Auto-Decay ───────────────────────────────────────────────────────
+_OBSTACLE_IGNORE_THRESHOLD = 2  # Szenen ohne Erwähnung → faded
+
+
+def _decay_obstacles(
+    new_state: dict,
+    old_state: dict | None,
+    scene_text: str,
+    player_action: str,
+) -> dict:
+    """Increase ignore_count for active obstacles that are not mentioned in the
+    new scene/player action. After threshold reached, mark them as 'faded' so
+    they no longer clog the UI or prompts.
+    Pure function — modifies and returns new_state."""
+    if not new_state or not isinstance(new_state, dict):
+        return new_state
+    items = new_state.get("world_items") or []
+    if not items:
+        return new_state
+
+    haystack = (scene_text or "") + " " + (player_action or "")
+    haystack_low = haystack.lower()
+    old_items_by_id = {}
+    for oi in (old_state or {}).get("world_items", []) or []:
+        if isinstance(oi, dict):
+            key = (oi.get("id") or oi.get("name") or "").lower()
+            if key:
+                old_items_by_id[key] = oi
+
+    out = []
+    for it in items:
+        if not isinstance(it, dict):
+            out.append(it)
+            continue
+        if it.get("type") != "obstacle":
+            out.append(it)
+            continue
+        status = it.get("status", "active")
+        if status not in ("active", "triggered"):
+            out.append(it)
+            continue
+        name_low = (it.get("name") or "").lower()
+        prev = old_items_by_id.get((it.get("id") or it.get("name") or "").lower(), {})
+        prev_ignore = int(prev.get("ignore_count", 0) or 0)
+        mentioned = bool(name_low) and name_low in haystack_low
+        if mentioned:
+            it["ignore_count"] = 0
+        else:
+            it["ignore_count"] = prev_ignore + 1
+            if it["ignore_count"] >= _OBSTACLE_IGNORE_THRESHOLD:
+                it["status"] = "faded"
+        out.append(it)
+    new_state["world_items"] = out
+    return new_state
+
+
 def _format_world_state_block(world_state: dict | None) -> str:
     """Format the world state as an authoritative constraint block at the top of the system prompt."""
     if not world_state:
@@ -119,6 +216,14 @@ def _format_world_state_block(world_state: dict | None) -> str:
         "⚠️ AKTUELLER SPIELZUSTAND — ABSOLUT VERBINDLICH ⚠️",
         "Dieser Zustand IST die Realität der Spielwelt. Er darf NICHT ignoriert, vergessen oder unbeabsichtigt verändert werden.\n",
     ]
+    # Story-Direktive (Director-System) — direkt ganz oben sichtbar
+    directive = (world_state.get("current_directive") or "").strip()
+    beat = (world_state.get("current_beat") or "").strip()
+    if directive:
+        beat_str = f" [{beat}]" if beat else ""
+        lines.append(f"🎯 STORY-ZIEL{beat_str}: {directive}")
+        lines.append("   → Mindestens eine Spieler-Option MUSS auf dieses Ziel hinarbeiten.")
+        lines.append("")
     if loc:
         lines.append(f"📍 Ort:         {loc}")
     if time_:
@@ -136,7 +241,10 @@ def _format_world_state_block(world_state: dict | None) -> str:
             lines.append(f"   • {f}")
 
     # World items section
-    items = [i for i in world_state.get("world_items", []) if isinstance(i, dict) and i.get("name")]
+    items = [
+        i for i in world_state.get("world_items", [])
+        if isinstance(i, dict) and i.get("name") and i.get("status") != "faded"
+    ]
     if items:
         lines.append("\n🎒 WELTGEGENSTÄNDE & CODES — PERSISTENT, VERBINDLICH, NICHT VERGESSEN:")
         for item in items:
@@ -452,7 +560,7 @@ Antworte IMMER und AUSSCHLIESSLICH mit genau diesen zwei Feldern im JSON-Format:
 Kein anderes Format. Kein anderes JSON-Schema. Nur "story" und "options"."""
 
 
-def build_user_prompt(player_action: str, recent_events: list, scene_number: int, detail_len: str = "MINDESTENS 3 Absätze", memory_depth: int = 3, unfound_items: list = None, active_obstacles: list = None) -> str:
+def build_user_prompt(player_action: str, recent_events: list, scene_number: int, detail_len: str = "MINDESTENS 3 Absätze", memory_depth: int = 3, unfound_items: list = None, active_obstacles: list = None, recent_options: list = None, directive: str = "") -> str:
     memory_block = ""
     if recent_events:
         events_to_show = recent_events[-memory_depth:]
@@ -514,13 +622,51 @@ def build_user_prompt(player_action: str, recent_events: list, scene_number: int
             + "\n".join(lines_obs)
         )
 
+    # Anti-repeat block: optionen, die der Spieler in den letzten Szenen NICHT
+    # gewählt hat, sollen nicht wieder aufgedrängt werden.
+    repeat_block = ""
+    if recent_options:
+        flat = []
+        for opts in recent_options[-3:]:
+            if isinstance(opts, list):
+                for o in opts:
+                    if isinstance(o, str) and o.strip():
+                        flat.append(o.strip())
+        # Nur Optionen, die mehrfach vorkamen (= ignoriert)
+        from collections import Counter
+        counts = Counter(o.lower() for o in flat)
+        sticky = [o for o in flat if counts[o.lower()] >= 2]
+        # Dedup, max 6
+        seen_low = set()
+        sticky_unique = []
+        for o in sticky:
+            if o.lower() not in seen_low:
+                seen_low.add(o.lower())
+                sticky_unique.append(o)
+        if sticky_unique:
+            listed = "\n".join(f'   • "{o}"' for o in sticky_unique[:6])
+            repeat_block = (
+                "\n\n## 🔄 ANTI-WIEDERHOLUNG — Diese Optionen wurden mehrfach vorgeschlagen "
+                "aber nicht gewählt. Schlage sie NICHT erneut vor:\n" + listed +
+                "\nBiete stattdessen NEUE, konkretere Aktionen an, die die Geschichte vorantreiben."
+            )
+
+    # Direktive für Choicemaker — eine Option muss aufs Ziel hinarbeiten
+    directive_block = ""
+    if directive:
+        directive_block = (
+            "\n\n## 🎯 STORY-ZIEL\n"
+            f"Aktuelles Mini-Ziel: {directive}\n"
+            "MINDESTENS eine der drei Optionen MUSS einen klaren Schritt in Richtung dieses Ziels ermöglichen."
+        )
+
     if scene_number == 1 and not player_action:
         return f"""## SZENE 1 — SPIELSTART
 {memory_block}
 
 Beginne die Geschichte. Stelle die Welt, den/die Hauptprotagonisten und die aktuelle Situation vor.
 Schreibe eine packende Eröffnungsszene. WICHTIG: Schreibe {detail_len} — nicht kürzer!
-Biete am Ende drei erste Entscheidungsmöglichkeiten an.{investigation_block}{obstacle_block}"""
+Biete am Ende drei erste Entscheidungsmöglichkeiten an.{investigation_block}{obstacle_block}{repeat_block}{directive_block}"""
 
     return f"""## SZENE {scene_number}
 {memory_block}
@@ -529,7 +675,7 @@ Biete am Ende drei erste Entscheidungsmöglichkeiten an.{investigation_block}{ob
 Der Spieler entscheidet: "{player_action}"
 
 Schreibe die nächste Szene. WICHTIG: Der "story"-Text MUSS {detail_len} lang sein — nicht kürzer!
-Berücksichtige alle bisherigen Ereignisse und die Charaktereigenschaften.{investigation_block}{obstacle_block}"""
+Berücksichtige alle bisherigen Ereignisse und die Charaktereigenschaften.{investigation_block}{obstacle_block}{repeat_block}{directive_block}"""
 
 
 async def call_ollama_json(prompt: str, system: str = "") -> dict:
@@ -620,6 +766,7 @@ async def _extract_world_state(
     model: str,
     num_ctx: int = 4096,
     output_language: str = "Deutsch",
+    glossary: str = "",
 ) -> dict | None:
     """Call Ollama to extract the current world state from a story passage.
     Returns a dict with location/time/weather/characters_present/established_facts, or None on failure."""
@@ -652,6 +799,7 @@ async def _extract_world_state(
         "WICHTIG fortschreitende Zeit: Wenn der Spielertext Aktionen mit Zeit-Wirkung enthält (warten, schlafen, reisen, kämpfen, untersuchen), passe 'time' an (z.B. 'früher Morgen' → 'Mittag' → 'Abend' → 'Nacht')."
     )
     user_prompt = (
+        f"{glossary}"
         f"Bisheriger Ort: {old_location}\n"
         f"Bisherige Fakten: {old_facts_text}\n"
         f"Bestehende Gegenstände: {old_items_text}\n\n"
@@ -702,6 +850,7 @@ async def _extract_character_states(
     model: str,
     num_ctx: int = 4096,
     output_language: str = "Deutsch",
+    glossary: str = "",
 ) -> list:
     """Call Ollama to extract updated character states (clothing, inventory, new experiences).
     Returns a list of dicts with name/current_clothing/inventory/new_experiences, or [] on failure."""
@@ -730,6 +879,7 @@ async def _extract_character_states(
         "Leere Felder als leeren String oder leere Liste. Keine Erlaeuterungen."
     )
     user_prompt = (
+        f"{glossary}"
         f"Aktuelle Charaktere:\n{char_summary}\n\n"
         f"=== SZENENTEXT ===\n{story_text[:2000]}\n\n"
         f"Welche Charakterzustaende haben sich veraendert? Sprache: {output_language}."
@@ -790,6 +940,9 @@ def _get_unfound_items(world_state: dict | None) -> list:
         status = item.get("status", "available")
         if itype == "obstacle":
             continue  # obstacles handled separately
+        # Items with a known owner are already "found" — skip them
+        if item.get("held_by"):
+            continue
         if itype == "code" and status == "unknown":
             result.append(item)
         elif itype != "code" and status == "available":
@@ -798,7 +951,8 @@ def _get_unfound_items(world_state: dict | None) -> list:
 
 
 def _get_active_obstacles(world_state: dict | None) -> list:
-    """Return obstacles that are currently active (unresolved threats)."""
+    """Return obstacles that are currently active (unresolved threats).
+    Skips faded (auto-decayed), overcome and avoided obstacles."""
     if not world_state:
         return []
     result = []
@@ -812,7 +966,10 @@ def _get_active_obstacles(world_state: dict | None) -> list:
 
 def _ensure_investigation_options(options: list, world_state: dict | None, language: str) -> list:
     """Post-processing safety net: if unfound items or active obstacles exist but no relevant
-    option is present, inject one based on an actual item/obstacle location."""
+    option is present, inject one based on an actual item/obstacle location.
+    SKIPPED if a story directive is present (Director-System leads instead)."""
+    if world_state and (world_state.get("current_directive") or "").strip():
+        return options
     unfound   = _get_unfound_items(world_state)
     obstacles = _get_active_obstacles(world_state)
     if not unfound and not obstacles:
@@ -927,6 +1084,7 @@ async def _interpret_action(
         "Korrigiere Tippfehler in der Spieleraktion (insbesondere Charakternamen aus der "
         "Liste anwesender Charaktere). Reformuliere unklare Aktionen in EINEN klaren Satz "
         "aus Sicht der Spieler-Eingabe. Behalte den Sinn bei. Erfinde nichts dazu. "
+        "WICHTIG: Eigennamen aus der Liste anwesender Charaktere NIEMALS verändern, kürzen oder durch ähnliche Namen ersetzen. "
         "Antworte NUR mit dem korrigierten Satz — KEIN JSON, keine Erklärung, keine Anführungszeichen."
     )
     user_prompt = (
@@ -986,6 +1144,7 @@ async def _build_recap(
         f"Du fasst eine laufende Geschichte für einen Game Master zusammen. Sprache: {output_language}. "
         "Schreibe genau 3-4 prägnante Sätze, die enthalten: aktuellen Ort, anwesende Charaktere, "
         "offene Konflikte/Spannungsbögen, und den letzten kritischen Wendepunkt. "
+        "WICHTIG: Eigennamen NIEMALS verändern, kürzen oder ersetzen — nutze die Schreibweise aus dem Kontext exakt. "
         "Keine Floskeln, keine Wiederholungen. Antworte NUR mit der Zusammenfassung — kein JSON."
     )
     user_prompt = (
@@ -1085,6 +1244,114 @@ async def _coherence_check(
     return {"score": 10, "issues": []}
 
 
+# ── Director-System: long-term story directive ───────────────────────────────
+_BEAT_CYCLE = ["SETUP", "KONFLIKT", "ESKALATION", "AUFLÖSUNG", "NEUE_FRAGE"]
+
+
+def _next_beat(current: str) -> str:
+    if not current:
+        return _BEAT_CYCLE[0]
+    try:
+        idx = _BEAT_CYCLE.index(current.upper())
+        return _BEAT_CYCLE[(idx + 1) % len(_BEAT_CYCLE)]
+    except ValueError:
+        return _BEAT_CYCLE[0]
+
+
+def _should_update_director(world_state: dict | None, scene_number: int) -> bool:
+    """Director läuft bei Spielstart oder alle 3 Szenen."""
+    if scene_number <= 1:
+        return True
+    if not world_state:
+        return True
+    if not (world_state.get("current_directive") or "").strip():
+        return True
+    last_update = int(world_state.get("directive_updated_at_scene", 0) or 0)
+    return (scene_number - last_update) >= 3
+
+
+async def _update_director(
+    world_state: dict | None,
+    recent_events: list,
+    config: dict,
+    characters: list,
+    model: str,
+    scene_number: int,
+    output_language: str = "Deutsch",
+) -> dict:
+    """Generate a new story directive (mini-goal) + beat tag.
+    Returns {"directive": "...", "beat": "..."} or {} on failure."""
+    glossary = _build_locked_glossary(world_state, characters)
+    story_frame = (config.get("story_frame") or "").strip()
+    scenario    = (config.get("scenario") or "").strip()
+    genre       = config.get("story_genre_custom") or config.get("story_genre", "")
+
+    prev_beat = (world_state or {}).get("current_beat", "")
+    suggested_beat = _next_beat(prev_beat) if prev_beat else "SETUP"
+
+    loc = (world_state or {}).get("location", "")
+    chars_present = ", ".join((world_state or {}).get("characters_present", [])[:5])
+    facts = "; ".join((world_state or {}).get("established_facts", [])[:5])
+
+    # last 3 player actions + outcomes
+    history = []
+    for ev in (recent_events or [])[-3:]:
+        a = (ev.get("interpreted_action") or ev.get("player_action") or "")[:80]
+        t = (ev.get("story_text") or "")[:200]
+        history.append(f"S{ev.get('scene_number','?')} [{a}]: {t}")
+    history_text = "\n\n".join(history) if history else "(noch keine Szenen)"
+
+    sys_prompt = (
+        f"Du bist der Story-Director eines {genre}-Textadventures auf {output_language}. "
+        "Deine Aufgabe: ein KURZES, KONKRETES Mini-Ziel ('directive') für die nächsten 2-3 Szenen "
+        "definieren, das die Geschichte voranbringt — KEIN abstrakter Wunsch, sondern eine "
+        "konkrete nächste Hürde, ein nächstes Ziel oder eine zu klärende Frage. "
+        "Beats: SETUP=Welt/Konflikt einführen, KONFLIKT=erstes Problem aufbauen, "
+        "ESKALATION=Konflikt zuspitzen, AUFLÖSUNG=Konflikt lösen, NEUE_FRAGE=neuer Aufhänger. "
+        "Antworte NUR mit JSON: {\"directive\":\"konkretes Ziel in 1 Satz\",\"beat\":\"<BEAT>\"}. "
+        "Sprache der directive: " + output_language + ". Keine Anführungszeichen-Verschachtelung."
+    )
+    user_prompt = (
+        f"{glossary}"
+        f"GENRE: {genre}\n"
+        f"STORY-FRAME: {story_frame or '(kein expliziter Frame)'}\n"
+        f"SZENARIO: {scenario or '(generisch)'}\n\n"
+        f"AKTUELLER ORT: {loc}\n"
+        f"ANWESEND: {chars_present}\n"
+        f"WICHTIGE FAKTEN: {facts}\n"
+        f"VORIGER BEAT: {prev_beat or '(keiner)'}\n"
+        f"VORGESCHLAGENER NÄCHSTER BEAT: {suggested_beat}\n\n"
+        f"=== LETZTE SZENEN ===\n{history_text}\n\n"
+        f"Aktuelle Direktive (kann verfeinert werden): "
+        f"{(world_state or {}).get('current_directive', '(keine)')}\n\n"
+        f"Erstelle ein konkretes Mini-Ziel für die nächsten 2-3 Szenen + den passenden Beat."
+    )
+    payload = {
+        "model": model,
+        "system": sys_prompt,
+        "prompt": user_prompt,
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0.4, "num_predict": 200, "num_ctx": 3072},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            resp = await client.post(OLLAMA_URL, json=payload)
+            resp.raise_for_status()
+            raw = (resp.json().get("response") or "").strip()
+        parsed = _extract_json(raw)
+        if isinstance(parsed, dict):
+            d = (parsed.get("directive") or "").strip()
+            b = (parsed.get("beat") or suggested_beat).strip().upper()
+            if d:
+                if b not in _BEAT_CYCLE:
+                    b = suggested_beat
+                return {"directive": d[:300], "beat": b}
+    except Exception:
+        pass
+    return {}
+
+
 async def generate_scene(
     player_action: str,
     scene_number: int,
@@ -1141,6 +1408,24 @@ async def generate_scene(
         player_action, world_state, events, model, output_language
     )
 
+    # ── STAGE 1b: Director update (every 3 scenes or when missing) ──────────
+    if _should_update_director(world_state, scene_number):
+        await _emit("director", "🎯 Story-Ziel aktualisieren")
+        director = await _update_director(
+            world_state, events, config, characters, model, scene_number, output_language
+        )
+        if director.get("directive"):
+            world_state = world_state or {}
+            world_state["current_directive"] = director["directive"]
+            world_state["current_beat"] = director.get("beat", "")
+            world_state["directive_updated_at_scene"] = scene_number
+            try:
+                save_world_state(story_id, world_state)
+            except Exception:
+                pass
+
+    directive_text = (world_state or {}).get("current_directive", "") or ""
+
     # ── STAGE 2: Build recap (only useful from scene 3 onward) ───────────────
     recap_text = ""
     if scene_number >= 3 and len(events) >= 2:
@@ -1151,6 +1436,18 @@ async def generate_scene(
     unfound_items    = _get_unfound_items(world_state)
     active_obstacles = _get_active_obstacles(world_state)
 
+    # Recent options (last 3 sets) for anti-repeat block
+    recent_options = []
+    for ev in (events or [])[-3:]:
+        opts = ev.get("options_json") or ev.get("options") or []
+        if isinstance(opts, str):
+            try:
+                opts = json.loads(opts)
+            except Exception:
+                opts = []
+        if isinstance(opts, list):
+            recent_options.append(opts)
+
     system_prompt = build_system_prompt(config, characters, output_language, world_state)
     _detail_map = {
         "niedrig": "1 Absatz",
@@ -1160,8 +1457,13 @@ async def generate_scene(
     detail_len  = _detail_map.get(config.get("detail_level", "hoch"), "MINDESTENS 3 Absätze")
     user_prompt = build_user_prompt(
         cleaned_action, events, scene_number, detail_len,
-        memory_depth, unfound_items, active_obstacles
+        memory_depth, unfound_items, active_obstacles,
+        recent_options=recent_options, directive=directive_text,
     )
+    # Always inject locked glossary so storyteller can't drift on names
+    glossary = _build_locked_glossary(world_state, characters)
+    if glossary:
+        user_prompt = glossary + "\n" + user_prompt
     if recap_text:
         user_prompt = (
             f"## RECAP DER BISHERIGEN STORY\n{recap_text}\n\n" + user_prompt
@@ -1246,11 +1548,18 @@ async def generate_scene(
     # ── STAGE 5: Extract world + character states (parallel) ─────────────────
     if result and len(result.get("story", "")) >= 150:
         await _emit("extract", "📦 Welt aktualisieren")
-        new_ws_task   = _extract_world_state(result["story"], world_state, config, model, num_ctx, output_language)
-        char_upd_task = _extract_character_states(result["story"], characters, model, num_ctx, output_language)
+        new_ws_task   = _extract_world_state(result["story"], world_state, config, model, num_ctx, output_language, glossary=glossary)
+        char_upd_task = _extract_character_states(result["story"], characters, model, num_ctx, output_language, glossary=glossary)
         new_ws, char_updates = await asyncio.gather(new_ws_task, char_upd_task, return_exceptions=False)
         if new_ws:
             new_ws["scene"] = scene_number
+            # Preserve directive across extraction (extractor doesn't know about it)
+            if (world_state or {}).get("current_directive"):
+                new_ws["current_directive"] = world_state.get("current_directive", "")
+                new_ws["current_beat"] = world_state.get("current_beat", "")
+                new_ws["directive_updated_at_scene"] = world_state.get("directive_updated_at_scene", scene_number)
+            # Auto-decay obstacles that were not mentioned/touched
+            new_ws = _decay_obstacles(new_ws, world_state, result.get("story", ""), cleaned_action)
             save_world_state(story_id, new_ws)
         for upd in (char_updates or []):
             update_character_state(
@@ -1267,6 +1576,8 @@ async def generate_scene(
         result["tone"]                = _ws.get("tone", "") or ""
         result["established_facts"]   = _ws.get("established_facts", []) or []
         result["characters_present"]  = _ws.get("characters_present", []) or []
+        result["current_directive"]   = _ws.get("current_directive", "") or ""
+        result["current_beat"]        = _ws.get("current_beat", "") or ""
         result["options"]             = _ensure_investigation_options(result["options"], _ws, output_language)
         result["coherence_score"]     = coherence.get("score", 10)
         result["coherence_issues"]    = coherence.get("issues", [])
@@ -1295,11 +1606,16 @@ async def generate_scene(
     result2 = _parse_result(raw2)
     if result2:
         await _emit("extract", "📦 Welt aktualisieren")
-        new_ws = await _extract_world_state(result2["story"], world_state, config, model, num_ctx, output_language)
+        new_ws = await _extract_world_state(result2["story"], world_state, config, model, num_ctx, output_language, glossary=glossary)
         if new_ws:
             new_ws["scene"] = scene_number
+            if (world_state or {}).get("current_directive"):
+                new_ws["current_directive"] = world_state.get("current_directive", "")
+                new_ws["current_beat"] = world_state.get("current_beat", "")
+                new_ws["directive_updated_at_scene"] = world_state.get("directive_updated_at_scene", scene_number)
+            new_ws = _decay_obstacles(new_ws, world_state, result2.get("story", ""), cleaned_action)
             save_world_state(story_id, new_ws)
-        char_updates = await _extract_character_states(result2["story"], characters, model, num_ctx, output_language)
+        char_updates = await _extract_character_states(result2["story"], characters, model, num_ctx, output_language, glossary=glossary)
         for upd in char_updates:
             update_character_state(
                 story_id, upd["name"],
@@ -1315,6 +1631,8 @@ async def generate_scene(
         result2["tone"]                = _ws.get("tone", "") or ""
         result2["established_facts"]   = _ws.get("established_facts", []) or []
         result2["characters_present"]  = _ws.get("characters_present", []) or []
+        result2["current_directive"]   = _ws.get("current_directive", "") or ""
+        result2["current_beat"]        = _ws.get("current_beat", "") or ""
         result2["options"]             = _ensure_investigation_options(result2["options"], _ws, output_language)
         result2["coherence_score"]     = 0
         result2["coherence_issues"]    = ["Fallback-Modus aktiviert"]

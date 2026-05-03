@@ -946,6 +946,8 @@ async function loadGameState() {
         tone:               gs.tone,
         established_facts:  gs.established_facts,
         characters_present: gs.characters_present,
+        current_directive:  gs.current_directive,
+        current_beat:       gs.current_beat,
       });
       scrollStoryToBottom();
       // Last options
@@ -1195,6 +1197,24 @@ function applyWorldAtmosphere(meta) {
   if (typeof renderCharacters === 'function' && Array.isArray(state.characters)) {
     renderCharacters(state.characters);
   }
+
+  // Story-Direktive (Director-System)
+  applyDirective(meta.current_directive || '', meta.current_beat || '');
+}
+
+function applyDirective(directive, beat) {
+  const bar = document.getElementById('directiveBar');
+  const txt = document.getElementById('directiveText');
+  const beatEl = document.getElementById('directiveBeat');
+  if (!bar || !txt) return;
+  const d = (directive || '').trim();
+  if (!d) {
+    bar.classList.add('hidden');
+    return;
+  }
+  bar.classList.remove('hidden');
+  txt.textContent = d;
+  if (beatEl) beatEl.textContent = (beat || '').trim();
 }
 
 function renderLoreFacts(facts) {
@@ -1468,6 +1488,8 @@ function renderScene(result, playerAction) {
     tone:               result.tone,
     established_facts:  result.established_facts,
     characters_present: result.characters_present,
+    current_directive:  result.current_directive,
+    current_beat:       result.current_beat,
   });
   // Trigger scene-pulse on header counter
   const sb = document.getElementById('sceneBadge');
@@ -1532,10 +1554,12 @@ async function confirmReset() {
     const hint = document.getElementById('startHint');
     if (hint) hint.textContent = '';
     // Reset atmosphere & HUD
-    applyWorldAtmosphere({ location:'', time:'', weather:'', established_facts:[], characters_present:[] });
+    applyWorldAtmosphere({ location:'', time:'', weather:'', established_facts:[], characters_present:[], current_directive:'', current_beat:'' });
     renderWorldItems([]);
     const atmoBar = document.getElementById('atmosphereBar');
     if (atmoBar) atmoBar.classList.add('hidden');
+    const dirBar = document.getElementById('directiveBar');
+    if (dirBar) dirBar.classList.add('hidden');
     showToast('Spiel zurückgesetzt.');
   } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
 }

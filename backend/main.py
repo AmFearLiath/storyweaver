@@ -605,6 +605,8 @@ async def game_state(story_id: int, user: dict = Depends(require_user)):
         "tone":                world_state.get("tone", "") or "",
         "established_facts":   world_state.get("established_facts", []) or [],
         "characters_present":  world_state.get("characters_present", []) or [],
+        "current_directive":   world_state.get("current_directive", "") or "",
+        "current_beat":        world_state.get("current_beat", "") or "",
     }
 
 
@@ -648,6 +650,8 @@ async def start_game(req: StartRequest, user: dict = Depends(require_user)):
         "tone":                      result.get("tone", "") or "",
         "established_facts":         result.get("established_facts", []) or [],
         "characters_present":        result.get("characters_present", []) or [],
+        "current_directive":         result.get("current_directive", "") or "",
+        "current_beat":              result.get("current_beat", "") or "",
     }
 
 
@@ -693,6 +697,8 @@ async def process_action(req: ActionRequest, user: dict = Depends(require_user))
         "tone":                      result.get("tone", "") or "",
         "established_facts":         result.get("established_facts", []) or [],
         "characters_present":        result.get("characters_present", []) or [],
+        "current_directive":         result.get("current_directive", "") or "",
+        "current_beat":              result.get("current_beat", "") or "",
     }
 
 
@@ -746,6 +752,8 @@ async def process_action_stream(req: ActionRequest, user: dict = Depends(require
                     "tone":                      result.get("tone", "") or "",
                     "established_facts":         result.get("established_facts", []) or [],
                     "characters_present":        result.get("characters_present", []) or [],
+                    "current_directive":         result.get("current_directive", "") or "",
+                    "current_beat":              result.get("current_beat", "") or "",
                     "coherence_score":           result.get("coherence_score", 10),
                     "coherence_issues":          result.get("coherence_issues", []),
                     "recap":                     result.get("recap", ""),
