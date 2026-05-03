@@ -251,6 +251,7 @@ class CharacterModel(BaseModel):
     experiences: List[str] = []
     avatar_path: str = ""
     skills: dict = {}
+    stats: dict = {}
 
 
 @app.post("/api/characters")
@@ -276,6 +277,7 @@ async def save_character(char: CharacterModel, user: dict = Depends(require_user
         experiences=list(char.experiences),
         avatar_path=char.avatar_path,
         skills=dict(char.skills) if isinstance(char.skills, dict) else {},
+        stats=dict(char.stats) if isinstance(char.stats, dict) else {},
         char_id=char.id,
     )
     return {"success": True}

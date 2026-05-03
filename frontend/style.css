@@ -1210,6 +1210,27 @@ body:not(.landing-page) { overflow: hidden; }
 }
 .skill-preset:hover { color: var(--accent, #f0c060); border-color: var(--accent, #f0c060); }
 
+/* Stats (Phase 9): vital/social meters 0..100 */
+.stats-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+.stat-row {
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--bg-elev-1, rgba(255,255,255,0.03));
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.08));
+  display: flex; flex-direction: column; gap: 4px;
+}
+.stat-row-head { display: flex; justify-content: space-between; align-items: baseline; }
+.stat-name { font-weight: 600; color: var(--text); }
+.stat-val { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; }
+.stat-range { width: 100%; }
+.stat-bar { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.stat-bar-fill { height: 100%; transition: width 0.18s ease, background 0.18s ease; }
+.stat-hint { font-size: 11px; color: var(--text-dim); }
+.stat-good { color: #6fdc8c; background: #6fdc8c; }
+.stat-mid  { color: #ffd166; background: #ffd166; }
+.stat-warn { color: #ff9f43; background: #ff9f43; }
+.stat-bad  { color: #ff5d5d; background: #ff5d5d; }
+.stat-val.stat-good, .stat-val.stat-mid, .stat-val.stat-warn, .stat-val.stat-bad { background: transparent; }
+
 /* Factions / Saves / Memories (Phase 6+7+8) */
 .factions-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
 .faction-row {

@@ -494,6 +494,7 @@ function openCharModal(id = null) {
   document.getElementById('experiencesList').innerHTML = '';
   renderSkills({});
   renderSkillPresets();
+  resetStatsToDefault();
 
   // Reset avatar tab
   _resetAvatarTab();
@@ -547,6 +548,11 @@ function openCharModalEdit(id) {
   let sk = c.skills;
   if (typeof sk === 'string') { try { sk = JSON.parse(sk || '{}'); } catch { sk = {}; } }
   renderSkills(sk || {});
+
+  // Stats-Tab
+  let st = c.stats;
+  if (typeof st === 'string') { try { st = JSON.parse(st || '{}'); } catch { st = {}; } }
+  renderStats(st || {});
 
   // Avatar-Tab
   if (c.avatar_path) {
@@ -706,6 +712,7 @@ async function saveCharacter() {
     inventory:       collectInventory(),
     experiences:     collectExperiences(),
     skills:          collectSkills(),
+    stats:           collectStats(),
     avatar_path:     (state.characters.find(ch => ch.id === parseInt(document.getElementById('editCharId').value || '0'))?.avatar_path) || '',
   };
 
@@ -839,6 +846,82 @@ function collectSkills() {
     if (n && Number.isFinite(v)) out[n] = Math.max(0, Math.min(10, v));
   });
   return out;
+}
+
+// ── Stats (Phase 9): vital/social meters 0..100 ──────────────────────────────
+const STAT_DEFS = [
+  { key: 'Gesundheit', def: 90, inverted: false, hint: 'Körperliche Verfassung, Wunden' },
+  { key: 'Stress',     def: 20, inverted: true,  hint: 'Mentale Belastung, Anspannung' },
+  { key: 'Ansehen',    def: 50, inverted: false, hint: 'Öffentlicher Ruf, Status' },
+  { key: 'Vertrauen',  def: 50, inverted: false, hint: 'Wie sehr Verbündete dem Charakter trauen' },
+  { key: 'Angst',      def: 15, inverted: true,  hint: 'Akute Furcht, Einschüchterung' },
+  { key: 'Loyalität',  def: 60, inverted: false, hint: 'Bindung an Verbündete/Sache' },
+  { key: 'Energie',    def: 80, inverted: false, hint: 'Ausdauer, Erschöpfung' },
+  { key: 'Moral',      def: 70, inverted: false, hint: 'Ethische Zuversicht, Durchhaltewille' },
+];
+
+function _statClass(stat, val) {
+  const inv = STAT_DEFS.find(s => s.key === stat)?.inverted;
+  if (inv) {
+    if (val >= 80) return 'stat-bad';
+    if (val >= 60) return 'stat-warn';
+    if (val >= 40) return 'stat-mid';
+    return 'stat-good';
+  }
+  if (val <= 20) return 'stat-bad';
+  if (val <= 40) return 'stat-warn';
+  if (val <= 60) return 'stat-mid';
+  return 'stat-good';
+}
+
+function renderStats(stats) {
+  const el = document.getElementById('statsList');
+  if (!el) return;
+  el.innerHTML = '';
+  STAT_DEFS.forEach(({ key, def, hint }) => {
+    const v = (stats && Object.prototype.hasOwnProperty.call(stats, key))
+      ? Math.max(0, Math.min(100, parseInt(stats[key]) || 0))
+      : def;
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    row.dataset.statName = key;
+    row.innerHTML = `
+      <div class="stat-row-head">
+        <span class="stat-name">${esc(key)}</span>
+        <span class="stat-val ${_statClass(key, v)}">${v}/100</span>
+      </div>
+      <input type="range" class="stat-range" min="0" max="100" step="1" value="${v}" />
+      <div class="stat-bar"><div class="stat-bar-fill ${_statClass(key, v)}" style="width:${v}%"></div></div>
+      <div class="stat-hint">${esc(hint)}</div>`;
+    const range = row.querySelector('.stat-range');
+    const valEl = row.querySelector('.stat-val');
+    const fill  = row.querySelector('.stat-bar-fill');
+    range.addEventListener('input', () => {
+      const nv = parseInt(range.value) || 0;
+      valEl.textContent = nv + '/100';
+      const cls = _statClass(key, nv);
+      valEl.className = 'stat-val ' + cls;
+      fill.className = 'stat-bar-fill ' + cls;
+      fill.style.width = nv + '%';
+    });
+    el.appendChild(row);
+  });
+}
+
+function collectStats() {
+  const out = {};
+  document.querySelectorAll('#statsList .stat-row').forEach(row => {
+    const k = row.dataset.statName;
+    const v = parseInt(row.querySelector('.stat-range')?.value);
+    if (k && Number.isFinite(v)) out[k] = Math.max(0, Math.min(100, v));
+  });
+  return out;
+}
+
+function resetStatsToDefault() {
+  const defs = {};
+  STAT_DEFS.forEach(s => { defs[s.key] = s.def; });
+  renderStats(defs);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -140,6 +140,7 @@ def _create_tables(conn):
             experiences TEXT DEFAULT '[]',
             avatar_path TEXT DEFAULT '',
             skills TEXT DEFAULT '{}',
+            stats TEXT DEFAULT '{}',
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
         )
@@ -261,6 +262,7 @@ def _migrate_character_state_columns(conn):
         ("inventory",        "TEXT DEFAULT '[]'"),
         ("experiences",      "TEXT DEFAULT '[]'"),        ("avatar_path",      "TEXT DEFAULT ''"),
         ("skills",           "TEXT DEFAULT '{}'"),
+        ("stats",            "TEXT DEFAULT '{}'"),
     ]
     for col, typedef in new_cols:
         try:
@@ -574,6 +576,13 @@ def get_characters(story_id: int) -> list:
                 d["skills"] = {}
         except Exception:
             d["skills"] = {}
+        # stats is a dict (0-100 values)
+        try:
+            d["stats"] = json.loads(d.get("stats") or "{}")
+            if not isinstance(d["stats"], dict):
+                d["stats"] = {}
+        except Exception:
+            d["stats"] = {}
         result.append(d)
     return result
 
@@ -587,12 +596,14 @@ def upsert_character(
     current_clothing: str = "", inventory: list = None, experiences: list = None,
     avatar_path: str = "",
     skills: dict | None = None,
+    stats: dict | None = None,
     char_id: int = None,
 ):
     rel_json = json.dumps(relationships or [])
     inv_json = json.dumps(inventory or [])
     exp_json = json.dumps(experiences or [])
     skl_json = json.dumps(skills or {})
+    sta_json = json.dumps(stats or {})
     conn = get_connection()
     if char_id:
         conn.execute(
@@ -601,14 +612,14 @@ def upsert_character(
                age=?, physical_traits=?, default_clothing=?, superpowers=?,
                likes=?, dislikes=?, favorite_weapon=?, relationships=?,
                current_clothing=?, inventory=?, experiences=?, avatar_path=?,
-               skills=?,
+               skills=?, stats=?,
                updated_at=CURRENT_TIMESTAMP
                WHERE id=? AND story_id=?""",
             (name, role, is_protagonist, description, status,
              age, physical_traits, default_clothing, superpowers,
              likes, dislikes, favorite_weapon, rel_json,
              current_clothing, inv_json, exp_json, avatar_path,
-             skl_json, char_id, story_id),
+             skl_json, sta_json, char_id, story_id),
         )
     else:
         conn.execute(
@@ -616,12 +627,12 @@ def upsert_character(
                (story_id, name, role, is_protagonist, description, status,
                 age, physical_traits, default_clothing, superpowers, likes,
                 dislikes, favorite_weapon, relationships,
-                current_clothing, inventory, experiences, avatar_path, skills)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                current_clothing, inventory, experiences, avatar_path, skills, stats)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (story_id, name, role, is_protagonist, description, status,
              age, physical_traits, default_clothing, superpowers,
              likes, dislikes, favorite_weapon, rel_json,
-             current_clothing, inv_json, exp_json, avatar_path, skl_json),
+             current_clothing, inv_json, exp_json, avatar_path, skl_json, sta_json),
         )
     conn.commit()
     conn.close()
@@ -633,12 +644,13 @@ def update_character_state(
     inventory: list | None = None,
     new_experiences: list | None = None,
     skill_changes: dict | None = None,
+    stat_changes: dict | None = None,
     max_experiences: int = 20,
 ):
-    """Lightweight update of runtime character state (clothing, inventory, experiences, skills)."""
+    """Lightweight update of runtime character state (clothing, inventory, experiences, skills, stats)."""
     conn = get_connection()
     row = conn.execute(
-        "SELECT id, experiences, skills FROM characters WHERE story_id=? AND LOWER(name)=LOWER(?)",
+        "SELECT id, experiences, skills, stats FROM characters WHERE story_id=? AND LOWER(name)=LOWER(?)",
         (story_id, char_name),
     ).fetchone()
     if not row:
@@ -681,6 +693,29 @@ def update_character_state(
             cur_skills[skill] = new_val
         updates.append("skills = ?")
         values.append(json.dumps(cur_skills))
+    if stat_changes:
+        try:
+            cur_stats = json.loads(row["stats"] or "{}")
+            if not isinstance(cur_stats, dict):
+                cur_stats = {}
+        except Exception:
+            cur_stats = {}
+        # Whitelist + clamp 0..100
+        from backend.constants import STAT_KEYS
+        for stat, delta in stat_changes.items():
+            if not stat or stat not in STAT_KEYS:
+                continue
+            try:
+                d = int(delta)
+            except Exception:
+                continue
+            # Clamp single-step delta to ±20 to avoid wild swings
+            d = max(-20, min(20, d))
+            cur_val = int(cur_stats.get(stat, 50))
+            new_val = max(0, min(100, cur_val + d))
+            cur_stats[stat] = new_val
+        updates.append("stats = ?")
+        values.append(json.dumps(cur_stats))
     if updates:
         values.extend([story_id, row["id"]])
         conn.execute(

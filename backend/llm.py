@@ -414,6 +414,19 @@ def build_system_prompt(config: dict, characters: list, output_language: str = "
             )
             if sk_pairs:
                 lines.append(f"🎯 Skills: {sk_pairs}")
+        # Stats (Phase 9) — 0..100 vital/social meters
+        stats = c.get("stats", {})
+        if isinstance(stats, str):
+            try: stats = json.loads(stats)
+            except: stats = {}
+        if isinstance(stats, dict) and stats:
+            from backend.constants import stat_label as _stat_label
+            st_pairs = ", ".join(
+                f"{k} {int(v)}/100 ({_stat_label(k, v)})"
+                for k, v in stats.items() if isinstance(v, (int, float))
+            )
+            if st_pairs:
+                lines.append(f"❤️ Stats: {st_pairs}")
         # Experiences (last 5)
         exp = c.get("experiences", [])
         if isinstance(exp, str):
@@ -647,6 +660,19 @@ Genre: {genre}
     heraus. Mische gelegentlich Variationen ein (kritischer Patzer auch bei hohem Skill,
     Glückstreffer bei niedrigem Skill — selten). Wenn der Charakter den Skill nicht hat,
     behandele die Aktion als Anfänger (Skill 1-2).
+16. CHARAKTER-STATS (0-100, ❤️ Stats im Charakterblock): Diese vitalen/sozialen Werte
+    spiegeln den Zustand jedes Charakters wider und MÜSSEN sich erzählerisch zeigen:
+       - Gesundheit niedrig (<40): Wunden, Erschöpfung, sichtbare Schwäche, Schmerzen.
+       - Stress hoch (>60): zittrige Hände, kurze Reizbarkeit, Konzentrationsprobleme.
+       - Angst hoch (>60): Vorsicht, Zögern, Fluchtinstinkt, körperliche Schreckreaktionen.
+       - Ansehen niedrig (<30): NPCs misstrauen, weichen aus, drohen oder verspotten.
+       - Vertrauen niedrig (<30): Verbündete halten Informationen zurück, hinterfragen.
+       - Loyalität hoch (>70): Verbündete kämpfen mit, decken Risiken, bleiben treu.
+       - Energie niedrig (<30): Charakter ist erschöpft, langsamer, will rasten.
+       - Moral niedrig (<30): Zweifel, Resignation, Bereitschaft aufzugeben.
+    Werte ändern sich durch Ereignisse: Verletzung -Gesundheit, Erfolg +Ansehen,
+    Verrat -Vertrauen, Bedrohung +Angst, Sieg +Moral, Anstrengung -Energie. NIEMALS
+    Zahlen oder Stat-Namen wörtlich nennen — zeige sie nur durch Verhalten/Beschreibung.
 {anti_drift_block}
 ## OUTPUT FORMAT
 Antworte IMMER und AUSSCHLIESSLICH mit genau diesen zwei Feldern im JSON-Format:
@@ -768,10 +794,19 @@ Biete am Ende drei erste Entscheidungsmöglichkeiten an.{investigation_block}{ob
     return f"""## SZENE {scene_number}
 {memory_block}
 
-## SPIELER-AKTION
+## SPIELER-AKTION (PFLICHT BEFOLGEN)
 Der Spieler entscheidet: "{player_action}"
 
+Diese Aktion MUSS in der Szene umgesetzt werden — nicht ignoriert, nicht umgedeutet,
+nicht durch eine andere Szene ersetzt. Wenn die Aktion einen Charakter nennt, muss
+dieser auftauchen oder kontaktiert werden. Wenn die Aktion einen Ortswechsel impliziert,
+MUSS sich location verändern. Wenn die Aktion eine Konfrontation/Bluff/Hack/etc. ist,
+MUSS das Ergebnis der Handlung in der Szene erzählt werden.
+
 Schreibe die nächste Szene. WICHTIG: Der "story"-Text MUSS {detail_len} lang sein — nicht kürzer!
+Die drei "options" am Ende MÜSSEN drei verschiedene, konkrete Folgehandlungen sein,
+die DIREKT auf das Ergebnis dieser Szene reagieren — keine Platzhalter wie
+"Erkunde die Umgebung", "Warte" oder "Weiter →".
 Berücksichtige alle bisherigen Ereignisse und die Charaktereigenschaften.{investigation_block}{obstacle_block}{repeat_block}{directive_block}"""
 
 
@@ -875,11 +910,11 @@ async def _extract_world_state(
     sys_prompt = (
         "Du bist ein Zustandsanalysator für ein Textadventure. "
         "Antworte NUR mit einem JSON-Objekt (kein Markdown). "
-        "Schema: {\"location\":\"...\",\"time\":\"...\",\"weather\":\"...\",\"tone\":\"calm|tense|grim|hopeful|mysterious|romantic|epic\","
-        "\"characters_present\":[\"Name1\",\"Name2\"],"
-        "\"established_facts\":[\"Fakt1\",\"Fakt2\"],"
-        "\"world_items\":[{\"id\":\"kurz_eindeutig\",\"name\":\"...\",\"description\":\"...\","
-        "\"location\":\"wo genau\",\"required_for\":\"wofür benötigt oder wie zu überwinden\","
+        "Schema: {\"location\":\"<Ortsname>\",\"time\":\"<Tageszeit>\",\"weather\":\"<Wetter>\",\"tone\":\"<EIN_WORT>\","
+        "\"characters_present\":[\"<Name>\"],"
+        "\"established_facts\":[\"<Fakt>\"],"
+        "\"world_items\":[{\"id\":\"<id>\",\"name\":\"<Name>\",\"description\":\"<Beschreibung>\","
+        "\"location\":\"<Position_des_Items>\",\"required_for\":\"<Zweck>\","
         "\"status\":\"available|held|used|unknown|found|active|triggered|overcome|avoided\",\"held_by\":null,"
         "\"type\":\"item|code|obstacle\",\"code_value\":null,\"danger_level\":null}]} "
         "type='code' für Zugangscodes/Kombinationen/Passwörter (code_value=der_code_string). "
@@ -892,7 +927,8 @@ async def _extract_world_state(
         "BEHALTE bestehende Einträge — aktualisiere nur deren Status wenn nötig. "
         "Füge neue hinzu wenn sie in der Szene auftauchen oder erwähnt werden. "
         "established_facts: max 8 kurze Fakten. Keine Erklärungen. "
-        "tone: ein einzelnes Wort aus {calm,tense,grim,hopeful,mysterious,romantic,epic} — die emotionale Grundstimmung der Szene. "
+        "tone: GENAU EIN Wort aus dieser Liste (kein Komma, kein Pipe, keine Aufzaehlung): calm, tense, grim, hopeful, mysterious, romantic, epic. "
+        "Beispiel: \"tone\":\"tense\". Niemals mehrere Werte zurueckgeben. "
         "WICHTIG fortschreitende Zeit: Wenn der Spielertext Aktionen mit Zeit-Wirkung enthält (warten, schlafen, reisen, kämpfen, untersuchen), passe 'time' an (z.B. 'früher Morgen' → 'Mittag' → 'Abend' → 'Nacht')."
     )
     user_prompt = (
@@ -953,6 +989,34 @@ async def _extract_world_state(
         loc_lower = (parsed.get("location") or "").lower()
         if any(hint in loc_lower for hint in _ITEM_LOC_HINTS):
             parsed["location"] = old_location
+
+        # ── Location sanity: reject schema-example strings ────────────────────
+        _SCHEMA_PLACEHOLDERS = {"wo genau", "...", "kurz_eindeutig", "name1", "name2", "fakt1", "fakt2", "<ein_wort>"}
+        if (parsed.get("location") or "").strip().lower() in _SCHEMA_PLACEHOLDERS:
+            parsed["location"] = old_location
+        if (parsed.get("weather") or "").strip().lower() in _SCHEMA_PLACEHOLDERS:
+            parsed["weather"] = (old_state or {}).get("weather", "") or ""
+        if (parsed.get("time") or "").strip().lower() in _SCHEMA_PLACEHOLDERS:
+            parsed["time"] = (old_state or {}).get("time", "") or ""
+
+        # ── Tone sanity: reject pipe-separated example copy ───────────────────
+        old_tone = (old_state or {}).get("tone", "") or ""
+        _VALID_TONES = {"calm", "tense", "grim", "hopeful", "mysterious", "romantic", "epic"}
+        tone_raw = (parsed.get("tone") or "").strip().lower()
+        if "|" in tone_raw or "," in tone_raw or len(tone_raw.split()) > 2:
+            # LLM copied the schema example verbatim — fall back to old tone
+            parsed["tone"] = old_tone
+        elif tone_raw and tone_raw not in _VALID_TONES:
+            # Try first whitespace-separated token; else keep old
+            first = tone_raw.split()[0] if tone_raw.split() else ""
+            parsed["tone"] = first if first in _VALID_TONES else old_tone
+
+        # ── Time sanity: prefer German phrasing, fall back if model returned english AM/PM ──
+        time_raw = (parsed.get("time") or "").strip()
+        if time_raw:
+            if any(en in time_raw.lower() for en in (" am", " pm", "am ", "pm ", "afternoon", "morning", "evening", "night")) and not any(de in time_raw.lower() for de in ("uhr", "morgen", "mittag", "nachmittag", "abend", "nacht", "dämmer")):
+                # Looks english; keep old time instead
+                parsed["time"] = (old_state or {}).get("time", "") or time_raw
 
         # Keep old established_facts if new ones are empty
         if not parsed.get("established_facts") and old_facts:
@@ -1062,15 +1126,23 @@ async def _extract_character_states(
             try: sk = json.loads(sk)
             except: sk = {}
         sk_text = ", ".join(f"{k}:{int(v)}" for k, v in sk.items() if isinstance(v, (int, float)))[:120] or "—"
-        char_lines.append(f"- {c['name']} | Trägt: {clothing} | Inventar: {inv_text} | Skills: {sk_text}")
+        st = c.get("stats") or {}
+        if isinstance(st, str):
+            try: st = json.loads(st)
+            except: st = {}
+        st_text = ", ".join(f"{k}:{int(v)}" for k, v in st.items() if isinstance(v, (int, float)))[:140] or "—"
+        char_lines.append(f"- {c['name']} | Trägt: {clothing} | Inventar: {inv_text} | Skills: {sk_text} | Stats: {st_text}")
     char_summary = "\n".join(char_lines)
+    from backend.constants import STAT_KEYS as _SK
+    stat_keys_csv = ", ".join(_SK)
     sys_prompt = (
         "Du bist ein Zustandsanalysator für Charaktere in einem Textadventure. "
         "Antworte NUR mit einem JSON-Array (kein Markdown). "
         "Schema: [{\"name\":\"...\",\"current_clothing\":\"...\","
         "\"inventory\":[\"Gegenstand1\",\"Gegenstand2\"],"
         "\"new_experiences\":[\"Kurze Beschreibung\"],"
-        "\"skill_changes\":{\"SkillName\":+1,\"AndererSkill\":-1}}] "
+        "\"skill_changes\":{\"SkillName\":+1,\"AndererSkill\":-1},"
+        "\"stat_changes\":{\"Gesundheit\":-10,\"Stress\":+15}}] "
         "WICHTIG: Erfasse ALLE Charaktere — auch NPCs — bei DEREN ERSTEM AUFTRETEN, "
         "wenn der Szenentext ihre Kleidung, Ausrüstung oder sichtbares Inventar beschreibt. "
         "Wenn current_clothing eines Charakters bisher leer ist und der Text Kleidung erwähnt, "
@@ -1081,6 +1153,13 @@ async def _extract_character_states(
         "anwendet ODER deutlich versagt. +1 fuer klaren Erfolg/Uebung, -1 fuer schweren "
         "Misserfolg. Verwende nur Skills, die der Charakter bereits hat (siehe oben). "
         "Hoechstens 1 Skill-Aenderung pro Charakter pro Szene. Leer lassen wenn unklar. "
+        f"stat_changes: Werte 0-100. Erlaubte Stat-Namen NUR aus dieser Liste: {stat_keys_csv}. "
+        "Aenderungen klein halten (typisch ±5 bis ±15, nur in Extremfaellen ±20). "
+        "BEISPIELE: Verletzung -> Gesundheit -10..-25; gefaehrliche Situation -> Stress +5..+15, Angst +5..+15; "
+        "oeffentlicher Erfolg -> Ansehen +5..+10; Verrat erlebt -> Vertrauen -10..-20; Sieg -> Moral +5..+10; "
+        "anstrengende Aktion -> Energie -5..-15; Rast/Heilung -> Gesundheit +5..+15, Energie +10..+20, Stress -10..-20. "
+        "WICHTIG: Wenn die Szene KEIN klares Ereignis zeigt das diesen Stat veraendert, lasse stat_changes leer. "
+        "Maximal 3 Stats pro Charakter pro Szene. "
         "Leere Felder als leeren String oder leere Liste. Keine Erlaeuterungen."
     )
     user_prompt = (
@@ -1766,8 +1845,16 @@ async def generate_scene(
         if not story:
             return None
         options = [o for o in (parsed.get("options") or []) if isinstance(o, str) and o.strip()]
+        # Filter generische Platzhalter raus
+        _GENERIC_OPTS = {
+            "weiter", "weiter →", "weiter ->",
+            "erkunde die umgebung", "umgebung erkunden",
+            "warte und beobachte", "warte ab", "abwarten",
+            "schaue mich um", "umsehen", "beobachten",
+        }
+        options = [o for o in options if o.strip().lower() not in _GENERIC_OPTS]
         if not options:
-            options = ["Weiter →", "Erkunde die Umgebung", "Warte und beobachte"]
+            options = []  # marker: needs choicemaker fallback
         return {
             "story":                     story,
             "options":                   options,
@@ -1777,10 +1864,69 @@ async def generate_scene(
             "interpreted_player_action": parsed.get("interpreted_player_action", cleaned_action),
         }
 
+    async def _generate_options_fallback(story_text: str, directive_str: str, last_action: str, char_names: list) -> list:
+        """Choicemaker fallback: derive 3 concrete next-steps from story_text + directive.
+        Only called when storyteller returned empty/generic options."""
+        npc_hint = ", ".join([n for n in char_names if n][:5]) or "—"
+        sys_p = (
+            "Du bist ein Choicemaker fuer ein Textadventure. "
+            "Antworte NUR mit JSON: {\"options\":[\"...\",\"...\",\"...\"]}. "
+            "Erzeuge GENAU 3 konkrete Folge-Aktionen fuer den Spieler, die DIREKT aus dem Szenentext folgen. "
+            "Jede Option ist 1 Satz, klar handlungsorientiert (Verb + Objekt/Person). "
+            "VERBOTEN: 'Weiter', 'Erkunde die Umgebung', 'Warte', 'Schaue mich um' oder andere Platzhalter. "
+            "MINDESTENS eine Option soll auf das Mini-Ziel hinarbeiten. "
+            "Optionen unterscheiden sich klar (eine vorsichtig, eine offensiv, eine sozial — wenn moeglich)."
+        )
+        usr_p = (
+            f"Mini-Ziel: {directive_str or '—'}\n"
+            f"Letzte Spieler-Aktion: {last_action or '—'}\n"
+            f"Bekannte Charaktere: {npc_hint}\n\n"
+            f"=== SZENENTEXT ===\n{story_text[:1800]}\n\n"
+            "Welche 3 konkreten Aktionen kann der Spieler jetzt waehlen?"
+        )
+        payload = {
+            "model": choicemaker_model or model,
+            "system": sys_p,
+            "prompt": usr_p,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.5, "num_predict": 220, "num_ctx": num_ctx},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=40.0) as client:
+                resp = await client.post(OLLAMA_URL, json=payload)
+                resp.raise_for_status()
+                raw_c = resp.json().get("response", "")
+            parsed_c = _extract_json(raw_c) or {}
+            opts = [o for o in (parsed_c.get("options") or []) if isinstance(o, str) and o.strip()]
+            return opts[:3]
+        except Exception:
+            return []
+
     # ── STAGE 3: Main scene generation ───────────────────────────────────────
     await _emit("generate", "✍️ Szene schreiben")
     raw = await _call_ollama(system_prompt, user_prompt)
     result = _parse_result(raw)
+
+    # ── STAGE 3b: Choicemaker fallback if storyteller returned no real options ──
+    if result and (not result.get("options")):
+        await _emit("choices", "🎯 Optionen generieren")
+        char_names_all = [c.get("name", "") for c in characters]
+        fb_opts = await _generate_options_fallback(
+            result["story"],
+            (world_state or {}).get("current_directive", "") or "",
+            cleaned_action,
+            char_names_all,
+        )
+        if fb_opts:
+            result["options"] = fb_opts
+        else:
+            # Last-resort: very generic but at least three distinct lines
+            result["options"] = [
+                "Weiter →",
+                "Erkunde die Umgebung",
+                "Warte und beobachte",
+            ]
 
     # ── STAGE 4: Coherence check + optional re-roll ──────────────────────────
     coherence: dict = {"score": 10, "issues": []}
@@ -1811,6 +1957,17 @@ async def generate_scene(
                     result = result_retry
                     coherence = retry_check
 
+    # If the (possibly re-rolled) result still has no options, generate now
+    if result and not result.get("options"):
+        char_names_all = [c.get("name", "") for c in characters]
+        fb_opts = await _generate_options_fallback(
+            result["story"],
+            (world_state or {}).get("current_directive", "") or "",
+            cleaned_action,
+            char_names_all,
+        )
+        result["options"] = fb_opts or ["Weiter →", "Erkunde die Umgebung", "Warte und beobachte"]
+
     # ── STAGE 5: Extract world + character states (parallel) ─────────────────
     if result and len(result.get("story", "")) >= 150:
         await _emit("extract", "📦 Welt aktualisieren")
@@ -1835,6 +1992,7 @@ async def generate_scene(
                 inventory=upd.get("inventory"),
                 new_experiences=upd.get("new_experiences"),
                 skill_changes=upd.get("skill_changes"),
+                stat_changes=upd.get("stat_changes"),
             )
         # Apply faction changes (Phase 7)
         for fu in (fac_updates or []):
@@ -1920,6 +2078,7 @@ async def generate_scene(
                 inventory=upd.get("inventory"),
                 new_experiences=upd.get("new_experiences"),
                 skill_changes=upd.get("skill_changes"),
+                stat_changes=upd.get("stat_changes"),
             )
         _ws = new_ws or world_state or {}
         result2["world_items"]         = _ws.get("world_items", [])

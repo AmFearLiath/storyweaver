@@ -310,6 +310,7 @@
       <button class="tab-btn" onclick="switchTab('ctab-personality', this)">⚔️ Charakter</button>
       <button class="tab-btn" onclick="switchTab('ctab-state', this)">🎒 Zustand</button>
       <button class="tab-btn" onclick="switchTab('ctab-relations', this)">🤝 Beziehungen</button>
+      <button class="tab-btn" onclick="switchTab('ctab-stats', this)">❤️ Stats</button>
       <button class="tab-btn" onclick="switchTab('ctab-skills', this)">🎯 Skills</button>
       <button class="tab-btn" onclick="switchTab('ctab-avatar', this)">🖼️ Avatar</button>
     </div>
@@ -455,7 +456,19 @@
       <button class="btn btn-outline btn-sm mt-2" onclick="addRelation()">＋ Beziehung hinzufügen</button>
     </div>
 
-    <!-- Tab: Avatar -->
+    <!-- Tab: Stats (vital/social meters) -->
+    <div id="ctab-stats" class="tab-content hidden">
+      <p class="form-hint" style="margin-bottom:12px">
+        Vitale &amp; soziale Werte (0–100). Werden durch Ereignisse in der Geschichte automatisch angepasst.
+        Hohe Stress-/Angst-Werte sind schlecht; bei allen anderen Stats sind hohe Werte gut.
+      </p>
+      <div id="statsList" class="stats-list"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="resetStatsToDefault()">⟲ Auf Standardwerte setzen</button>
+      </div>
+    </div>
+
+    <!-- Tab: Skills -->
     <div id="ctab-skills" class="tab-content hidden">
       <p class="form-hint" style="margin-bottom:12px">Skills bestimmen, wie gut der Charakter bestimmte Handlungen meistert. Wert 0–10. Skills wachsen oder sinken im Spielverlauf je nach Erfolg/Misserfolg automatisch.</p>
       <div id="skillsList" class="skills-list"></div>
