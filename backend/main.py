@@ -24,6 +24,8 @@ from backend.database import (
     get_recent_events, save_event, increment_scene, reset_game, undo_last_event,
     # world state
     get_world_state,
+    save_world_state,
+    update_character_state,
     # config
     get_llm_config, set_llm_config,
     # db connection (used in import)
@@ -814,6 +816,147 @@ async def game_undo(req: UndoRequest, user: dict = Depends(require_user)):
         "established_facts":   world_state.get("established_facts", []) or [],
         "characters_present":  world_state.get("characters_present", []) or [],
     }
+
+
+# ── Inventar-Mutationen (kein LLM-Call) ────────────────────────────────────────
+
+def _char_inv(characters: list, name: str) -> list:
+    """Parse current inventory list of a character (case-insensitive name match)."""
+    n = (name or "").strip().lower()
+    for c in characters:
+        if (c.get("name") or "").strip().lower() == n:
+            inv = c.get("inventory")
+            if isinstance(inv, str):
+                try:
+                    inv = json.loads(inv)
+                except Exception:
+                    inv = []
+            return list(inv) if isinstance(inv, list) else []
+    return []
+
+
+def _strip_item(inv: list, item_name: str) -> tuple[list, bool]:
+    """Removes first case-insensitive match of item_name from inv. Returns (new_list, removed)."""
+    target = (item_name or "").strip().lower()
+    out = []
+    removed = False
+    for it in inv:
+        if not removed and isinstance(it, str) and it.strip().lower() == target:
+            removed = True
+            continue
+        out.append(it)
+    return out, removed
+
+
+class InventoryTransferRequest(BaseModel):
+    story_id: int
+    from_char: str
+    to_char: str
+    item_name: str
+
+
+@app.post("/api/game/inventory/transfer")
+async def inventory_transfer(req: InventoryTransferRequest, user: dict = Depends(require_user)):
+    require_story(req.story_id, user)
+    if req.from_char.strip().lower() == req.to_char.strip().lower():
+        raise HTTPException(status_code=400, detail="Geber und Empfänger müssen unterschiedlich sein.")
+    chars = get_characters(req.story_id)
+    src = _char_inv(chars, req.from_char)
+    dst = _char_inv(chars, req.to_char)
+    new_src, removed = _strip_item(src, req.item_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"{req.from_char} besitzt '{req.item_name}' nicht.")
+    new_dst = list(dst) + [req.item_name]
+    update_character_state(req.story_id, req.from_char, inventory=new_src)
+    update_character_state(req.story_id, req.to_char,   inventory=new_dst)
+    # Sync world_items.held_by if matching item exists
+    ws = get_world_state(req.story_id) or {}
+    items = ws.get("world_items") or []
+    target = req.item_name.strip().lower()
+    changed = False
+    for it in items:
+        if isinstance(it, dict) and (it.get("name") or "").strip().lower() == target:
+            it["held_by"] = req.to_char
+            it["status"]  = it.get("status") or "acquired"
+            changed = True
+            break
+    if changed:
+        ws["world_items"] = items
+        save_world_state(req.story_id, ws)
+    return {"success": True, "from_inventory": new_src, "to_inventory": new_dst}
+
+
+class InventoryDropRequest(BaseModel):
+    story_id: int
+    char: str
+    item_name: str
+
+
+@app.post("/api/game/inventory/drop")
+async def inventory_drop(req: InventoryDropRequest, user: dict = Depends(require_user)):
+    require_story(req.story_id, user)
+    chars = get_characters(req.story_id)
+    src = _char_inv(chars, req.char)
+    new_src, removed = _strip_item(src, req.item_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"{req.char} besitzt '{req.item_name}' nicht.")
+    update_character_state(req.story_id, req.char, inventory=new_src)
+    # Add/update in world_items at current location
+    ws = get_world_state(req.story_id) or {}
+    items = list(ws.get("world_items") or [])
+    target = req.item_name.strip().lower()
+    found = False
+    for it in items:
+        if isinstance(it, dict) and (it.get("name") or "").strip().lower() == target:
+            it["held_by"] = ""
+            it["location"] = ws.get("location", "") or it.get("location", "")
+            it["status"]  = "acquired"
+            found = True
+            break
+    if not found:
+        items.append({
+            "name": req.item_name,
+            "status": "acquired",
+            "held_by": "",
+            "location": ws.get("location", "") or "",
+        })
+    ws["world_items"] = items
+    save_world_state(req.story_id, ws)
+    return {"success": True, "inventory": new_src, "world_items": items}
+
+
+class InventoryTakeRequest(BaseModel):
+    story_id: int
+    char: str
+    item_name: str
+
+
+@app.post("/api/game/inventory/take")
+async def inventory_take(req: InventoryTakeRequest, user: dict = Depends(require_user)):
+    require_story(req.story_id, user)
+    ws = get_world_state(req.story_id) or {}
+    items = list(ws.get("world_items") or [])
+    target = req.item_name.strip().lower()
+    matched = None
+    for it in items:
+        if isinstance(it, dict) and (it.get("name") or "").strip().lower() == target:
+            matched = it
+            break
+    if not matched:
+        raise HTTPException(status_code=404, detail=f"'{req.item_name}' ist nicht in der Welt vorhanden.")
+    holder = (matched.get("held_by") or "").strip().lower()
+    if holder and holder != req.char.strip().lower():
+        raise HTTPException(status_code=400, detail=f"'{req.item_name}' wird bereits von {matched.get('held_by')} getragen.")
+    matched["held_by"] = req.char
+    matched["status"]  = "acquired"
+    ws["world_items"] = items
+    save_world_state(req.story_id, ws)
+    chars = get_characters(req.story_id)
+    inv = _char_inv(chars, req.char)
+    if not any(isinstance(i, str) and i.strip().lower() == target for i in inv):
+        inv.append(req.item_name)
+        update_character_state(req.story_id, req.char, inventory=inv)
+    return {"success": True, "inventory": inv, "world_items": items}
 
 
 # ── History ────────────────────────────────────────────────────────────────────

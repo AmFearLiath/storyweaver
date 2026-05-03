@@ -418,6 +418,7 @@ async function loadCharacters() {
   try {
     state.characters = await api(`/api/characters/${state.currentStoryId}`) || [];
     renderCharacters(state.characters);
+    if (typeof renderInventories === 'function') renderInventories();
   } catch {}
 }
 
@@ -1176,6 +1177,159 @@ function renderWorldItems(items) {
   setCount('obstaclesCount', obstacleItems.length);
   // Tension level from active/triggered obstacles
   _updateTension(obstacleItems);
+  // Char-Inventories panel reuses world_items + characters state
+  renderInventories();
+}
+
+// ── Charakter-Inventare (Phase 4) ─────────────────────────────────────────────
+function renderInventories() {
+  const list = document.getElementById('rightInventoryList');
+  const countEl = document.getElementById('invCount');
+  if (!list) return;
+  const chars = Array.isArray(state.characters) ? state.characters : [];
+  const wi = Array.isArray(state.worldItems) ? state.worldItems : [];
+
+  // Items in der Welt (held_by leer, type=item, status=acquired/known)
+  const droppedItems = wi.filter(i =>
+    (i.type || 'item') === 'item' &&
+    !(i.held_by || '').trim() &&
+    !['used', 'faded'].includes((i.status || '').toLowerCase())
+  );
+
+  let totalCount = 0;
+  let html = '';
+
+  for (const c of chars) {
+    let inv = c.inventory;
+    if (typeof inv === 'string') {
+      try { inv = JSON.parse(inv); } catch { inv = []; }
+    }
+    if (!Array.isArray(inv)) inv = [];
+    totalCount += inv.length;
+    const isOpen = state.openInvChars && state.openInvChars.has(c.name);
+    const itemsHtml = inv.length
+      ? inv.map((it, i) => `
+          <div class="inv-item">
+            <span class="inv-item-name" title="${esc(it)}">${esc(it)}</span>
+            <button class="inv-btn" title="An anderen Charakter geben"
+                    onclick="invShowTransferPopover(event, ${JSON.stringify(c.name).replace(/"/g, '&quot;')}, ${JSON.stringify(it).replace(/"/g, '&quot;')})">→</button>
+            <button class="inv-btn inv-btn-danger" title="Ablegen"
+                    onclick="invDrop(${JSON.stringify(c.name).replace(/"/g, '&quot;')}, ${JSON.stringify(it).replace(/"/g, '&quot;')})">✗</button>
+          </div>`).join('')
+      : '<div class="inv-empty">Leer</div>';
+    html += `
+      <div class="inv-char${isOpen ? ' open' : ''}" data-char="${esc(c.name)}">
+        <div class="inv-char-header" onclick="invToggleChar(${JSON.stringify(c.name).replace(/"/g, '&quot;')})">
+          <span class="inv-char-toggle">▶</span>
+          <span class="inv-char-name">${esc(c.name)}</span>
+          <span class="inv-char-count">${inv.length}</span>
+        </div>
+        <div class="inv-items">${itemsHtml}</div>
+      </div>`;
+  }
+
+  if (droppedItems.length) {
+    const itemsHtml = droppedItems.map(it => `
+      <div class="inv-item">
+        <span class="inv-item-name" title="${esc(it.name)}">${esc(it.name)}</span>
+        <button class="inv-btn" title="Aufnehmen"
+                onclick="invShowTakePopover(event, ${JSON.stringify(it.name).replace(/"/g, '&quot;')})">↩</button>
+      </div>`).join('');
+    html += `
+      <div class="inv-take-section">
+        <div class="inv-section-label">📍 Liegt herum</div>
+        ${itemsHtml}
+      </div>`;
+  }
+
+  if (!html) {
+    list.innerHTML = '<div class="hud-empty">Noch keine Gegenstände</div>';
+  } else {
+    list.innerHTML = html;
+  }
+  if (countEl) countEl.textContent = totalCount;
+}
+
+if (!state.openInvChars) state.openInvChars = new Set();
+
+function invToggleChar(name) {
+  if (!state.openInvChars) state.openInvChars = new Set();
+  if (state.openInvChars.has(name)) state.openInvChars.delete(name);
+  else state.openInvChars.add(name);
+  renderInventories();
+}
+
+function _invClosePopover() {
+  document.querySelectorAll('.inv-popover').forEach(p => p.remove());
+}
+
+function _invShowPopover(ev, choices, onPick) {
+  ev.stopPropagation();
+  _invClosePopover();
+  const pop = document.createElement('div');
+  pop.className = 'inv-popover';
+  for (const ch of choices) {
+    const b = document.createElement('button');
+    b.textContent = ch;
+    b.onclick = (e) => { e.stopPropagation(); _invClosePopover(); onPick(ch); };
+    pop.appendChild(b);
+  }
+  const cancel = document.createElement('button');
+  cancel.className = 'pop-cancel';
+  cancel.textContent = 'Abbrechen';
+  cancel.onclick = (e) => { e.stopPropagation(); _invClosePopover(); };
+  pop.appendChild(cancel);
+  document.body.appendChild(pop);
+  const rect = ev.target.getBoundingClientRect();
+  pop.style.left = Math.max(8, rect.right - 140) + 'px';
+  pop.style.top  = (rect.bottom + 4) + 'px';
+  setTimeout(() => document.addEventListener('click', _invClosePopover, { once: true }), 0);
+}
+
+function invShowTransferPopover(ev, fromChar, itemName) {
+  const others = (state.characters || [])
+    .map(c => c.name)
+    .filter(n => n && n !== fromChar);
+  if (others.length === 0) { showToast('Keine anderen Charaktere verfügbar.'); return; }
+  _invShowPopover(ev, others, (toChar) => invTransfer(fromChar, toChar, itemName));
+}
+
+function invShowTakePopover(ev, itemName) {
+  const all = (state.characters || []).map(c => c.name).filter(Boolean);
+  if (all.length === 0) { showToast('Keine Charaktere verfügbar.'); return; }
+  _invShowPopover(ev, all, (toChar) => invTake(toChar, itemName));
+}
+
+async function invTransfer(fromChar, toChar, itemName) {
+  try {
+    await api('/api/game/inventory/transfer', 'POST', {
+      story_id: state.currentStoryId, from_char: fromChar, to_char: toChar, item_name: itemName,
+    });
+    await loadCharacters();
+    showToast(`${itemName} → ${toChar}`);
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function invDrop(charName, itemName) {
+  try {
+    const r = await api('/api/game/inventory/drop', 'POST', {
+      story_id: state.currentStoryId, char: charName, item_name: itemName,
+    });
+    await loadCharacters();
+    if (r && Array.isArray(r.world_items)) renderWorldItems(r.world_items);
+    showToast(`${itemName} abgelegt`);
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function invTake(charName, itemName) {
+  try {
+    const r = await api('/api/game/inventory/take', 'POST', {
+      story_id: state.currentStoryId, char: charName, item_name: itemName,
+    });
+    await loadCharacters();
+    if (r && Array.isArray(r.world_items)) renderWorldItems(r.world_items);
+    showToast(`${charName} nimmt ${itemName}`);
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
 }
 
 // ── Atmosphere & Story-Adaptive Theming ──────────────────────────────────────
