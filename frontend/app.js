@@ -1253,12 +1253,10 @@ function renderWorldItems(items) {
   const itemItems     = state.worldItems.filter(i => (i.type || 'item') === 'item');
   const codeItems     = state.worldItems.filter(i => i.type === 'code');
   const obstacleItems = state.worldItems.filter(i => i.type === 'obstacle');
-  _renderWorldPanel('rightItemsPanel',     'rightItemsList',     itemItems,     'Keine Gegenstände gesammelt');
   _renderWorldPanel('rightCodesPanel',     'rightCodesList',     codeItems,     'Noch keine Codes entdeckt');
   _renderWorldPanel('rightObstaclesPanel', 'rightObstaclesList', obstacleItems, 'Keine bekannten Hindernisse');
   // Counts
   const setCount = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
-  setCount('itemsCount',     itemItems.length);
   setCount('codesCount',     codeItems.length);
   setCount('obstaclesCount', obstacleItems.length);
   // Tension level from active/triggered obstacles
