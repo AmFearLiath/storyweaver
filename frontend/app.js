@@ -492,6 +492,8 @@ function openCharModal(id = null) {
   document.getElementById('relationsList').innerHTML = '';
   document.getElementById('inventoryList').innerHTML = '';
   document.getElementById('experiencesList').innerHTML = '';
+  renderSkills({});
+  renderSkillPresets();
 
   // Reset avatar tab
   _resetAvatarTab();
@@ -540,6 +542,11 @@ function openCharModalEdit(id) {
   renderInventory(inv);
   const exp = Array.isArray(c.experiences) ? c.experiences : [];
   renderExperiences(exp);
+
+  // Skills-Tab
+  let sk = c.skills;
+  if (typeof sk === 'string') { try { sk = JSON.parse(sk || '{}'); } catch { sk = {}; } }
+  renderSkills(sk || {});
 
   // Avatar-Tab
   if (c.avatar_path) {
@@ -698,6 +705,7 @@ async function saveCharacter() {
     current_clothing:getVal('editCharCurrentClothing'),
     inventory:       collectInventory(),
     experiences:     collectExperiences(),
+    skills:          collectSkills(),
     avatar_path:     (state.characters.find(ch => ch.id === parseInt(document.getElementById('editCharId').value || '0'))?.avatar_path) || '',
   };
 
@@ -760,6 +768,77 @@ function collectRelations() {
     if (target) result.push({ target, type, description: desc });
   });
   return result;
+}
+
+// ── Skills (Phase 5) ──────────────────────────────────────────────────────────
+const SKILL_PRESETS = [
+  'Schiessen','Schleichen','Verhandlung','Hacken','Klettern','Lockpicking',
+  'Erste Hilfe','Wahrnehmung','Athletik','Charisma','Nahkampf','Überleben',
+  'Tarnung','Recherche','Handwerk','Magie','Reiten','Fahren'
+];
+
+function renderSkills(skills) {
+  const el = document.getElementById('skillsList');
+  if (!el) return;
+  el.innerHTML = '';
+  Object.entries(skills || {}).forEach(([name, val]) => addSkillRow(name, val));
+}
+
+function renderSkillPresets() {
+  const el = document.getElementById('skillPresets');
+  if (!el) return;
+  el.innerHTML = '';
+  SKILL_PRESETS.forEach(name => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'skill-preset';
+    b.textContent = name;
+    b.onclick = () => {
+      if (collectSkills()[name] !== undefined) { showToast('Skill "'+name+'" existiert bereits.'); return; }
+      addSkillRow(name, 5);
+    };
+    el.appendChild(b);
+  });
+}
+
+function addSkillRow(name, value) {
+  const list = document.getElementById('skillsList');
+  if (!list) return;
+  const v = Math.max(0, Math.min(10, parseInt(value) || 0));
+  const row = document.createElement('div');
+  row.className = 'skill-row';
+  row.innerHTML = `
+    <input type="text" class="input-field skill-name-input" value="${esc(name)}" placeholder="Skill-Name" />
+    <span class="skill-value">${v}/10</span>
+    <input type="range" class="skill-range" min="0" max="10" step="1" value="${v}" />
+    <button class="skill-del" title="Entfernen">✕</button>`;
+  const range = row.querySelector('.skill-range');
+  const valueLbl = row.querySelector('.skill-value');
+  range.addEventListener('input', () => { valueLbl.textContent = range.value + '/10'; });
+  row.querySelector('.skill-del').onclick = () => row.remove();
+  list.appendChild(row);
+}
+
+function addSkill() {
+  const nameEl = document.getElementById('newSkillName');
+  const valEl = document.getElementById('newSkillValue');
+  const name = (nameEl?.value || '').trim();
+  if (!name) { showToast('Bitte Skill-Namen eingeben.'); return; }
+  if (collectSkills()[name] !== undefined) { showToast('Skill existiert bereits.'); return; }
+  const v = Math.max(0, Math.min(10, parseInt(valEl?.value) || 0));
+  addSkillRow(name, v);
+  if (nameEl) nameEl.value = '';
+  if (valEl) valEl.value = '5';
+}
+
+function collectSkills() {
+  const out = {};
+  document.querySelectorAll('#skillsList .skill-row').forEach(row => {
+    const n = row.querySelector('.skill-name-input')?.value?.trim();
+    const v = parseInt(row.querySelector('.skill-range')?.value);
+    if (n && Number.isFinite(v)) out[n] = Math.max(0, Math.min(10, v));
+  });
+  return out;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

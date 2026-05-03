@@ -378,6 +378,25 @@ def build_system_prompt(config: dict, characters: list, output_language: str = "
             except: inv = []
         if inv:
             lines.append(f"🎒 Inventar: {', '.join(str(i) for i in inv)}")
+        # Skills (Phase 5) — int values 0..10 represent proficiency
+        skills = c.get("skills", {})
+        if isinstance(skills, str):
+            try: skills = json.loads(skills)
+            except: skills = {}
+        if isinstance(skills, dict) and skills:
+            def _skill_label(v):
+                v = int(v) if isinstance(v, (int, float)) else 0
+                if v >= 8: return "meisterhaft"
+                if v >= 6: return "geübt"
+                if v >= 4: return "solide"
+                if v >= 2: return "anfangs"
+                return "schwach"
+            sk_pairs = ", ".join(
+                f"{k} {int(v)}/10 ({_skill_label(v)})"
+                for k, v in skills.items() if isinstance(v, (int, float))
+            )
+            if sk_pairs:
+                lines.append(f"🎯 Skills: {sk_pairs}")
         # Experiences (last 5)
         exp = c.get("experiences", [])
         if isinstance(exp, str):
@@ -567,6 +586,18 @@ Genre: {genre}
 14. NPC-DETAILS: Wenn ein NPC zum ersten Mal Kleidung/Ausrüstung zeigt oder etwas trägt,
     erwähne diese Details konkret (Stoff, Farbe, sichtbare Items). Diese Details werden
     in der Welt persistent gespeichert und sollten konsistent fortgeführt werden.
+15. SKILL-BASIERTE ERFOLGE (unsichtbare Würfelmechanik): Beachte die Skill-Werte (0-10) der
+    handelnden Charaktere im Charakter-Block. Wenn eine Aktion klar zu einem Skill passt
+    (Schiessen, Schleichen, Verhandlung, Hacken, Klettern, Lockpicking, etc.), entscheide
+    Erfolg/Misserfolg implizit nach diesem Wert:
+       - Skill 0-2: Aktion misslingt häufig, schwere Komplikationen sind wahrscheinlich
+       - Skill 3-5: gemischte Ergebnisse — Teilerfolg, kleine Patzer, Bedingungen
+       - Skill 6-7: Erfolg ist wahrscheinlich, aber nicht perfekt — kleine Reibungen
+       - Skill 8-10: souveräner Erfolg, oft mit Stil oder zusätzlichem Vorteil
+    NIEMALS Würfelwürfe oder Zahlen erwähnen. Erzähle das Ergebnis natürlich aus der Welt
+    heraus. Mische gelegentlich Variationen ein (kritischer Patzer auch bei hohem Skill,
+    Glückstreffer bei niedrigem Skill — selten). Wenn der Charakter den Skill nicht hat,
+    behandele die Aktion als Anfänger (Skill 1-2).
 {anti_drift_block}
 ## OUTPUT FORMAT
 Antworte IMMER und AUSSCHLIESSLICH mit genau diesen zwei Feldern im JSON-Format:
@@ -879,20 +910,30 @@ async def _extract_character_states(
         inv = c.get("inventory") or []
         inv_text = ", ".join(inv[:5]) if inv else "keins"
         clothing = c.get("current_clothing") or c.get("default_clothing") or ""
-        char_lines.append(f"- {c['name']} | Trägt: {clothing} | Inventar: {inv_text}")
+        sk = c.get("skills") or {}
+        if isinstance(sk, str):
+            try: sk = json.loads(sk)
+            except: sk = {}
+        sk_text = ", ".join(f"{k}:{int(v)}" for k, v in sk.items() if isinstance(v, (int, float)))[:120] or "—"
+        char_lines.append(f"- {c['name']} | Trägt: {clothing} | Inventar: {inv_text} | Skills: {sk_text}")
     char_summary = "\n".join(char_lines)
     sys_prompt = (
         "Du bist ein Zustandsanalysator für Charaktere in einem Textadventure. "
         "Antworte NUR mit einem JSON-Array (kein Markdown). "
         "Schema: [{\"name\":\"...\",\"current_clothing\":\"...\","
         "\"inventory\":[\"Gegenstand1\",\"Gegenstand2\"],"
-        "\"new_experiences\":[\"Kurze Beschreibung\"]}] "
+        "\"new_experiences\":[\"Kurze Beschreibung\"],"
+        "\"skill_changes\":{\"SkillName\":+1,\"AndererSkill\":-1}}] "
         "WICHTIG: Erfasse ALLE Charaktere — auch NPCs — bei DEREN ERSTEM AUFTRETEN, "
         "wenn der Szenentext ihre Kleidung, Ausrüstung oder sichtbares Inventar beschreibt. "
         "Wenn current_clothing eines Charakters bisher leer ist und der Text Kleidung erwähnt, "
         "MUSST du diesen Charakter mit der beschriebenen Kleidung zurückgeben. "
         "inventory: vollstaendige aktuelle Liste (max 15 Eintraege). "
         "new_experiences: nur wirklich neue Ereignisse, max 2 pro Szene, kurze Saetze. "
+        "skill_changes: NUR wenn der Charakter im Szenentext einen relevanten Skill aktiv "
+        "anwendet ODER deutlich versagt. +1 fuer klaren Erfolg/Uebung, -1 fuer schweren "
+        "Misserfolg. Verwende nur Skills, die der Charakter bereits hat (siehe oben). "
+        "Hoechstens 1 Skill-Aenderung pro Charakter pro Szene. Leer lassen wenn unklar. "
         "Leere Felder als leeren String oder leere Liste. Keine Erlaeuterungen."
     )
     user_prompt = (
@@ -1598,6 +1639,7 @@ async def generate_scene(
                 current_clothing=upd.get("current_clothing"),
                 inventory=upd.get("inventory"),
                 new_experiences=upd.get("new_experiences"),
+                skill_changes=upd.get("skill_changes"),
             )
         _ws = new_ws or world_state or {}
         result["world_items"]         = _ws.get("world_items", [])
@@ -1653,6 +1695,7 @@ async def generate_scene(
                 current_clothing=upd.get("current_clothing"),
                 inventory=upd.get("inventory"),
                 new_experiences=upd.get("new_experiences"),
+                skill_changes=upd.get("skill_changes"),
             )
         _ws = new_ws or world_state or {}
         result2["world_items"]         = _ws.get("world_items", [])
