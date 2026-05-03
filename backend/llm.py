@@ -136,6 +136,22 @@ def _build_locked_glossary(
             if isinstance(it, dict):
                 add(it.get("name", ""))
                 add(it.get("held_by", ""))
+        # Extract canonical place/org names from established_facts
+        # German proper nouns after prepositions or in capitalized compound words
+        import re as _re
+        _STOP_CAPS = {"Der", "Die", "Das", "Ein", "Eine", "Und", "Auch", "Dass",
+                      "Nicht", "Wenn", "Wird", "Hat", "Ist", "Von", "Aus", "Mit",
+                      "Bei", "Nach", "Vor", "Zur", "Zum", "Durch", "Über"}
+        for fact in (world_state.get("established_facts") or [])[:8]:
+            # Names after common German prepositions indicating places/orgs
+            for token in _re.findall(
+                r'(?:in|von|nach|zu|bei|aus|für|durch|um|auf|unter|an)\s+'
+                r'([A-ZÄÖÜ][a-zäöüßA-ZÄÖÜ-]{3,}(?:\s+[A-ZÄÖÜ][a-zäöüß-]{3,})?)',
+                str(fact)
+            ):
+                word = token.strip()
+                if word not in _STOP_CAPS and len(word) > 4:
+                    add(word)
 
     if not names:
         return ""
@@ -907,6 +923,37 @@ async def _extract_world_state(
         parsed = _extract_json(raw)
         if not isinstance(parsed, dict):
             return None
+
+        # ── Rescue: Item-at-Root-Bug ─────────────────────────────────────────
+        # The LLM sometimes returns an item object at the root level (with id/name/type)
+        # instead of a world-state object. Detect and rescue nested world_items/facts.
+        _WS_KEYS = {"location", "time", "weather", "characters_present", "established_facts", "tone"}
+        has_world_keys = bool(_WS_KEYS & set(parsed.keys()))
+        looks_like_item = (
+            parsed.get("type") in ("item", "code", "obstacle")
+            or (
+                "id" in parsed
+                and "name" in parsed
+                and ("description" in parsed or "descripiont" in parsed)
+                and not has_world_keys
+            )
+        )
+        if looks_like_item:
+            parsed = {
+                "location": old_location,
+                "established_facts": parsed.get("established_facts", old_facts),
+                "world_items": parsed.get("world_items", old_items),
+            }
+
+        # ── Location sanity: reject item-position strings as story location ──
+        _ITEM_LOC_HINTS = (
+            "in der hand", "im besitz", "bei ", "in der tasche",
+            "getragen von", "held by", "in inventory", "auf dem tisch",
+        )
+        loc_lower = (parsed.get("location") or "").lower()
+        if any(hint in loc_lower for hint in _ITEM_LOC_HINTS):
+            parsed["location"] = old_location
+
         # Keep old established_facts if new ones are empty
         if not parsed.get("established_facts") and old_facts:
             parsed["established_facts"] = old_facts[:8]
@@ -1623,6 +1670,21 @@ async def generate_scene(
         if isinstance(opts, list):
             recent_options.append(opts)
 
+    # Detect repeated generic-explore player actions (stall detection)
+    _GENERIC_EXPLORE_TRIGGERS = (
+        "erkunde", "untersuche die umgebung", "schaue mich um", "schau mich um",
+        "beobachte", "look around", "explore", "sehe mich um", "sieh dich um",
+    )
+    last_player_actions = [
+        (ev.get("interpreted_action") or ev.get("player_action") or "").lower()
+        for ev in (events or [])[-3:]
+    ]
+    generic_explore_count = sum(
+        1 for a in last_player_actions
+        if any(g in a for g in _GENERIC_EXPLORE_TRIGGERS)
+    )
+    _force_progress = generic_explore_count >= 2
+
     system_prompt = build_system_prompt(config, characters, output_language, world_state, factions=factions)
     _detail_map = {
         "niedrig": "1 Absatz",
@@ -1635,6 +1697,17 @@ async def generate_scene(
         memory_depth, unfound_items, active_obstacles,
         recent_options=recent_options, directive=directive_text,
     )
+    # Force-progress injection: wenn 2+ generische Erkundungsaktionen in Folge
+    if _force_progress:
+        user_prompt += (
+            "\n\n## 🚨 ERZWUNGENER FORTSCHRITT\n"
+            "In den letzten 2 oder mehr Szenen hat der Spieler nur die Umgebung erkundet "
+            "ohne konkreten Fortschritt. Diese Szene MUSS einen Wendepunkt bringen:\n"
+            "Entweder eine Entdeckung, ein NPC-Kontakt, ein Zwischenfall oder eine "
+            "direkte Konsequenz des Erkundens (z.B. entdeckt werden, einen Hinweis finden, "
+            "eine Falle auslösen, eine Tür finden). Beschreibe NIEMALS wieder ergebnislos "
+            "die Umgebung. Biete konkrete, handlungsauslösende Optionen an."
+        )
     # Always inject locked glossary so storyteller can't drift on names
     glossary = _build_locked_glossary(world_state, characters)
     if glossary:
