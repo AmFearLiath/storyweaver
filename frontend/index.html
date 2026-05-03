@@ -708,6 +708,28 @@
       <select id="ollamaModel" class="select-field"><option value="">Lade Modelle...</option></select>
     </div>
 
+    <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:10px">
+      <label class="setting-label" style="margin-bottom:8px;display:block">🎭 Rollen-spezifische Modelle</label>
+      <p class="setting-desc" style="margin:0 0 10px">Leer lassen = Hauptmodell verwenden. Kleine/schnelle Modelle für Hilfsrollen sparen Zeit.</p>
+
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 10px;align-items:center">
+        <label class="setting-label" style="margin:0">📖 Storyteller</label>
+        <select id="modelStoryteller" class="select-field"><option value="">— Hauptmodell —</option></select>
+
+        <label class="setting-label" style="margin:0">🎯 Director</label>
+        <select id="modelDirector" class="select-field"><option value="">— Hauptmodell —</option></select>
+
+        <label class="setting-label" style="margin:0">📦 Cataloger</label>
+        <select id="modelCataloger" class="select-field"><option value="">— Hauptmodell —</option></select>
+
+        <label class="setting-label" style="margin:0">🎲 Choicemaker</label>
+        <select id="modelChoicemaker" class="select-field"><option value="">— Hauptmodell —</option></select>
+
+        <label class="setting-label" style="margin:0">🧠 Interpreter</label>
+        <select id="modelInterpreter" class="select-field"><option value="">— Hauptmodell —</option></select>
+      </div>
+    </div>
+
     <div class="form-group">
       <label class="setting-label">🌍 Ausgabesprache</label>
       <select id="outputLanguage" class="select-field">

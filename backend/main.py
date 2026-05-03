@@ -913,10 +913,15 @@ class LLMConfigRequest(BaseModel):
 
 @app.post("/api/llm/config")
 async def save_llm(req: LLMConfigRequest, user: dict = Depends(require_user)):
+    allowed = {
+        "temperature", "top_p", "repeat_penalty", "ollama_model",
+        "num_ctx", "num_predict", "output_language", "memory_depth",
+        "model_storyteller", "model_director", "model_cataloger",
+        "model_choicemaker", "model_interpreter",
+    }
     for key, value in req.config.items():
-        if key in ("temperature", "top_p", "repeat_penalty", "ollama_model",
-                   "num_ctx", "num_predict", "output_language", "memory_depth"):
-            set_llm_config(key, str(value))
+        if key in allowed:
+            set_llm_config(key, str(value) if value is not None else "")
     return {"success": True}
 
 

@@ -149,6 +149,23 @@ def _build_locked_glossary(
 _OBSTACLE_IGNORE_THRESHOLD = 2  # Szenen ohne Erwähnung → faded
 
 
+# ── Multi-LLM Rollen-Auflösung ───────────────────────────────────────────────
+_VALID_ROLES = ("storyteller", "director", "cataloger", "choicemaker", "interpreter")
+
+
+def _resolve_role_model(role: str, llm_cfg: dict, available: list | None, fallback: str) -> str:
+    """Picks a role-specific model from global_config (key 'model_<role>').
+    Falls back to the main model if unset or not currently available in Ollama."""
+    if role not in _VALID_ROLES:
+        return fallback
+    val = (llm_cfg.get(f"model_{role}") or "").strip()
+    if not val:
+        return fallback
+    if available and val not in available:
+        return fallback
+    return val
+
+
 def _decay_obstacles(
     new_state: dict,
     old_state: dict | None,
@@ -1397,6 +1414,20 @@ async def generate_scene(
         tags = await check_ollama_connection()
         available = tags.get("models", [])
         model = available[0] if available else "llama3"
+    else:
+        try:
+            tags = await check_ollama_connection()
+            available = tags.get("models", [])
+        except Exception:
+            available = []
+    # Role-specific overrides — empty/unavailable → fall back to main `model`
+    storyteller_model = _resolve_role_model("storyteller", llm_cfg, available, model)
+    director_model    = _resolve_role_model("director",    llm_cfg, available, model)
+    cataloger_model   = _resolve_role_model("cataloger",   llm_cfg, available, model)
+    choicemaker_model = _resolve_role_model("choicemaker", llm_cfg, available, model)
+    interpreter_model = _resolve_role_model("interpreter", llm_cfg, available, model)
+    # The main story-call uses the storyteller model
+    model = storyteller_model
     temp     = float(llm_cfg.get("temperature", "0.7"))
     top_p    = float(llm_cfg.get("top_p", "0.9"))
     rep_pen  = float(llm_cfg.get("repeat_penalty", "1.1"))
@@ -1405,14 +1436,14 @@ async def generate_scene(
     # ── STAGE 1: Interpret action ────────────────────────────────────────────
     await _emit("interpret", "🧠 Aktion verstehen")
     cleaned_action = await _interpret_action(
-        player_action, world_state, events, model, output_language
+        player_action, world_state, events, interpreter_model, output_language
     )
 
     # ── STAGE 1b: Director update (every 3 scenes or when missing) ──────────
     if _should_update_director(world_state, scene_number):
         await _emit("director", "🎯 Story-Ziel aktualisieren")
         director = await _update_director(
-            world_state, events, config, characters, model, scene_number, output_language
+            world_state, events, config, characters, director_model, scene_number, output_language
         )
         if director.get("directive"):
             world_state = world_state or {}
@@ -1430,7 +1461,7 @@ async def generate_scene(
     recap_text = ""
     if scene_number >= 3 and len(events) >= 2:
         await _emit("recap", "📜 Kontext zusammenfassen")
-        recap_text = await _build_recap(events, world_state, model, depth=memory_depth + 1, output_language=output_language)
+        recap_text = await _build_recap(events, world_state, cataloger_model, depth=memory_depth + 1, output_language=output_language)
 
     # Collect unfound items/codes & active obstacles (mandatory hints)
     unfound_items    = _get_unfound_items(world_state)
@@ -1522,7 +1553,7 @@ async def generate_scene(
         await _emit("check", "🔍 Konsistenz prüfen")
         char_names = [c.get("name", "") for c in characters]
         coherence = await _coherence_check(
-            result["story"], world_state, recap_text, char_names, genre, model
+            result["story"], world_state, recap_text, char_names, genre, cataloger_model
         )
         if coherence.get("score", 10) < 6 and coherence.get("issues"):
             # Re-roll once with concrete violation hints baked into the prompt
@@ -1539,7 +1570,7 @@ async def generate_scene(
             if result_retry and len(result_retry.get("story", "")) >= 200:
                 # Verify retry actually improved
                 retry_check = await _coherence_check(
-                    result_retry["story"], world_state, recap_text, char_names, genre, model
+                    result_retry["story"], world_state, recap_text, char_names, genre, cataloger_model
                 )
                 if retry_check.get("score", 10) > coherence.get("score", 10):
                     result = result_retry
@@ -1548,8 +1579,8 @@ async def generate_scene(
     # ── STAGE 5: Extract world + character states (parallel) ─────────────────
     if result and len(result.get("story", "")) >= 150:
         await _emit("extract", "📦 Welt aktualisieren")
-        new_ws_task   = _extract_world_state(result["story"], world_state, config, model, num_ctx, output_language, glossary=glossary)
-        char_upd_task = _extract_character_states(result["story"], characters, model, num_ctx, output_language, glossary=glossary)
+        new_ws_task   = _extract_world_state(result["story"], world_state, config, cataloger_model, num_ctx, output_language, glossary=glossary)
+        char_upd_task = _extract_character_states(result["story"], characters, cataloger_model, num_ctx, output_language, glossary=glossary)
         new_ws, char_updates = await asyncio.gather(new_ws_task, char_upd_task, return_exceptions=False)
         if new_ws:
             new_ws["scene"] = scene_number
@@ -1606,7 +1637,7 @@ async def generate_scene(
     result2 = _parse_result(raw2)
     if result2:
         await _emit("extract", "📦 Welt aktualisieren")
-        new_ws = await _extract_world_state(result2["story"], world_state, config, model, num_ctx, output_language, glossary=glossary)
+        new_ws = await _extract_world_state(result2["story"], world_state, config, cataloger_model, num_ctx, output_language, glossary=glossary)
         if new_ws:
             new_ws["scene"] = scene_number
             if (world_state or {}).get("current_directive"):
@@ -1615,7 +1646,7 @@ async def generate_scene(
                 new_ws["directive_updated_at_scene"] = world_state.get("directive_updated_at_scene", scene_number)
             new_ws = _decay_obstacles(new_ws, world_state, result2.get("story", ""), cleaned_action)
             save_world_state(story_id, new_ws)
-        char_updates = await _extract_character_states(result2["story"], characters, model, num_ctx, output_language, glossary=glossary)
+        char_updates = await _extract_character_states(result2["story"], characters, cataloger_model, num_ctx, output_language, glossary=glossary)
         for upd in char_updates:
             update_character_state(
                 story_id, upd["name"],

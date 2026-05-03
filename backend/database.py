@@ -188,6 +188,12 @@ def _ensure_global_config(conn):
         ("top_p", "0.9"),
         ("repeat_penalty", "1.1"),
         ("ollama_model", "llama3"),
+        # Role-specific model overrides (empty = use main ollama_model)
+        ("model_storyteller", ""),
+        ("model_director",    ""),
+        ("model_cataloger",   ""),
+        ("model_choicemaker", ""),
+        ("model_interpreter", ""),
     ]
     for key, value in defaults:
         c.execute("INSERT OR IGNORE INTO global_config (key, value) VALUES (?, ?)", (key, value))

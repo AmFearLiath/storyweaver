@@ -838,6 +838,17 @@ function _populateModelSelect(models, preferredModel) {
     : preferredModel && models.includes(preferredModel) ? preferredModel
     : models[0];
   sel.value = target;
+
+  // Populate role-specific selects (with empty option = "use main model")
+  const roleSelects = ['modelStoryteller','modelDirector','modelCataloger','modelChoicemaker','modelInterpreter'];
+  for (const id of roleSelects) {
+    const rs = document.getElementById(id);
+    if (!rs) continue;
+    const prevR = rs.value;
+    rs.innerHTML = '<option value="">— Hauptmodell —</option>'
+      + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+    if (prevR && (prevR === '' || models.includes(prevR))) rs.value = prevR;
+  }
 }
 
 function closeLLMModal() { document.getElementById('llmModal').classList.add('hidden'); }
@@ -860,6 +871,21 @@ async function loadLLMConfig() {
       if (exists) modelSel.value = cfg.ollama_model;
       // else: leave checkOllama()'s selection intact
     }
+    // Role-specific model dropdowns
+    const roleMap = {
+      modelStoryteller: cfg.model_storyteller,
+      modelDirector:    cfg.model_director,
+      modelCataloger:   cfg.model_cataloger,
+      modelChoicemaker: cfg.model_choicemaker,
+      modelInterpreter: cfg.model_interpreter,
+    };
+    for (const [id, val] of Object.entries(roleMap)) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      const v = (val || '').trim();
+      const opt = [...el.options].find(o => o.value === v);
+      el.value = opt ? v : '';
+    }
   } catch {}
 }
 
@@ -873,6 +899,11 @@ async function saveLLMSettings() {
     memory_depth:    parseInt(document.getElementById('memory_depth')?.value || 3),
     num_ctx:         getVal('numCtx') || '4096',
     output_language: getVal('outputLanguage') || 'Deutsch',
+    model_storyteller: getVal('modelStoryteller'),
+    model_director:    getVal('modelDirector'),
+    model_cataloger:   getVal('modelCataloger'),
+    model_choicemaker: getVal('modelChoicemaker'),
+    model_interpreter: getVal('modelInterpreter'),
   };
   try {
     await api('/api/llm/config', 'POST', { config });
