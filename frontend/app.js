@@ -920,12 +920,13 @@ function _populateModelSelect(models, preferredModel) {
   sel.value = target;
 
   // Populate role-specific selects (with empty option = "use main model")
-  const roleSelects = ['modelStoryteller','modelDirector','modelCataloger','modelChoicemaker','modelInterpreter'];
+  const roleSelects = ['modelStoryteller','modelDirector','modelCataloger','modelChoicemaker','modelInterpreter','embeddingModel'];
   for (const id of roleSelects) {
     const rs = document.getElementById(id);
     if (!rs) continue;
     const prevR = rs.value;
-    rs.innerHTML = '<option value="">— Hauptmodell —</option>'
+    const placeholder = id === 'embeddingModel' ? '— Hash-Fallback —' : '— Hauptmodell —';
+    rs.innerHTML = `<option value="">${placeholder}</option>`
       + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
     if (prevR && (prevR === '' || models.includes(prevR))) rs.value = prevR;
   }
@@ -958,6 +959,7 @@ async function loadLLMConfig() {
       modelCataloger:   cfg.model_cataloger,
       modelChoicemaker: cfg.model_choicemaker,
       modelInterpreter: cfg.model_interpreter,
+      embeddingModel:   cfg.embedding_model,
     };
     for (const [id, val] of Object.entries(roleMap)) {
       const el = document.getElementById(id);
@@ -966,6 +968,9 @@ async function loadLLMConfig() {
       const opt = [...el.options].find(o => o.value === v);
       el.value = opt ? v : '';
     }
+    // Memory top-K
+    const tk = document.getElementById('memoryTopK');
+    if (tk) tk.value = parseInt(cfg.memory_top_k || '3') || 3;
   } catch {}
 }
 
@@ -984,6 +989,8 @@ async function saveLLMSettings() {
     model_cataloger:   getVal('modelCataloger'),
     model_choicemaker: getVal('modelChoicemaker'),
     model_interpreter: getVal('modelInterpreter'),
+    embedding_model:   getVal('embeddingModel'),
+    memory_top_k:      String(parseInt(document.getElementById('memoryTopK')?.value || 3) || 3),
   };
   try {
     await api('/api/llm/config', 'POST', { config });
@@ -2303,6 +2310,272 @@ async function exportStoryMarkdown() {
 // ── Shortcuts Modal ──────────────────────────────────────────────────────────
 function openShortcutsModal()  { const m = document.getElementById('shortcutsModal'); if (m) m.classList.remove('hidden'); }
 function closeShortcutsModal() { const m = document.getElementById('shortcutsModal'); if (m) m.classList.add('hidden'); }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FACTIONS (Phase 7)
+// ══════════════════════════════════════════════════════════════════════════════
+let _factionsCache = [];
+
+function _requireStory() {
+  if (!state.currentStoryId) { showToast('Erst eine Story wählen.', 'error'); return false; }
+  return true;
+}
+
+async function openFactionsModal() {
+  if (!_requireStory()) return;
+  document.getElementById('factionsModal').classList.remove('hidden');
+  await loadFactions();
+}
+function closeFactionsModal() { document.getElementById('factionsModal').classList.add('hidden'); }
+
+async function loadFactions() {
+  try {
+    const r = await api(`/api/factions/${state.currentStoryId}`);
+    _factionsCache = (r && r.factions) || [];
+    renderFactions();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+function _attLabel(v) {
+  v = parseInt(v) || 0;
+  if (v <= -76) return 'todfeindlich';
+  if (v <= -41) return 'feindselig';
+  if (v <= -11) return 'misstrauisch';
+  if (v <=  10) return 'neutral';
+  if (v <=  40) return 'wohlwollend';
+  if (v <=  75) return 'freundlich';
+  return 'treu ergeben';
+}
+function _attClass(v) {
+  v = parseInt(v) || 0;
+  if (v >= 11) return 'faction-att-pos';
+  if (v <= -11) return 'faction-att-neg';
+  return 'faction-att-neu';
+}
+
+function renderFactions() {
+  const list = document.getElementById('factionsList');
+  if (!list) return;
+  if (_factionsCache.length === 0) {
+    list.innerHTML = '<p class="form-hint" style="text-align:center;padding:18px">Noch keine Fraktionen. Füge welche hinzu oder spiele ein paar Szenen — der Cataloger erkennt sie automatisch.</p>';
+    return;
+  }
+  list.innerHTML = _factionsCache.map((f, idx) => `
+    <div class="faction-row expanded" data-idx="${idx}">
+      <div class="faction-head">
+        <input type="text" data-k="name" value="${esc(f.name||'')}" placeholder="Fraktionsname" style="flex:1;min-width:160px;font-weight:600" />
+        <select data-k="status" class="select-field" style="width:auto">
+          ${['active','hostile','allied','dissolved'].map(s => `<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+        <button class="faction-del" title="Löschen" onclick="deleteFaction(${idx})">🗑</button>
+      </div>
+      <div class="faction-att-bar">
+        <span class="form-hint" style="min-width:130px">Haltung zum Spieler:</span>
+        <input type="range" data-k="attitude_player" min="-100" max="100" value="${parseInt(f.attitude_player)||0}"
+               oninput="this.parentElement.querySelector('.faction-att-value').textContent=this.value;this.parentElement.querySelector('.faction-att-label').textContent=window._attLabel?window._attLabel(this.value):'';" />
+        <span class="faction-att-value ${_attClass(f.attitude_player)}">${parseInt(f.attitude_player)||0}</span>
+        <span class="form-hint faction-att-label">${_attLabel(f.attitude_player)}</span>
+      </div>
+      <textarea data-k="description" placeholder="Beschreibung (kurz)…">${esc(f.description||'')}</textarea>
+      <textarea data-k="traits" placeholder="Merkmale (z.B. „mächtig, korrupt, religiös")…">${esc(f.traits||'')}</textarea>
+      <textarea data-k="goals" placeholder="Ziele/Motivation…">${esc(f.goals||'')}</textarea>
+    </div>
+  `).join('');
+  // expose for inline handlers
+  window._attLabel = _attLabel;
+}
+
+function addFactionRow() {
+  _factionsCache.push({ id: null, name: '', description: '', status: 'active', attitude_player: 0, attitudes: {}, traits: '', goals: '' });
+  renderFactions();
+}
+
+async function deleteFaction(idx) {
+  const f = _factionsCache[idx]; if (!f) return;
+  if (!f.id) { _factionsCache.splice(idx, 1); renderFactions(); return; }
+  if (!confirm(`Fraktion "${f.name}" wirklich löschen?`)) return;
+  try {
+    await api(`/api/factions/${state.currentStoryId}/${f.id}`, 'DELETE');
+    showToast('Fraktion gelöscht.');
+    await loadFactions();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function saveAllFactions() {
+  // Read DOM into cache
+  const rows = document.querySelectorAll('#factionsList .faction-row');
+  rows.forEach((row, idx) => {
+    const f = _factionsCache[idx]; if (!f) return;
+    row.querySelectorAll('[data-k]').forEach(el => {
+      const k = el.getAttribute('data-k');
+      if (k === 'attitude_player') f[k] = parseInt(el.value) || 0;
+      else f[k] = el.value;
+    });
+  });
+  let saved = 0, failed = 0;
+  for (const f of _factionsCache) {
+    if (!(f.name || '').trim()) continue;
+    try {
+      const payload = { ...f, story_id: state.currentStoryId };
+      const r = await api('/api/factions', 'POST', payload);
+      if (r && r.id) f.id = r.id;
+      saved++;
+    } catch { failed++; }
+  }
+  showToast(failed ? `${saved} gespeichert, ${failed} fehlgeschlagen` : `${saved} Fraktionen gespeichert.`);
+  await loadFactions();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SAVE-SLOTS / BRANCHING (Phase 8)
+// ══════════════════════════════════════════════════════════════════════════════
+async function openSavesModal() {
+  if (!_requireStory()) return;
+  document.getElementById('savesModal').classList.remove('hidden');
+  await loadSaves();
+}
+function closeSavesModal() { document.getElementById('savesModal').classList.add('hidden'); }
+
+async function loadSaves() {
+  try {
+    const r = await api(`/api/saves/${state.currentStoryId}`);
+    const saves = (r && r.saves) || [];
+    const list = document.getElementById('savesList');
+    if (saves.length === 0) {
+      list.innerHTML = '<p class="form-hint" style="text-align:center;padding:18px">Noch keine Speicherstände.</p>';
+      return;
+    }
+    list.innerHTML = saves.map(s => `
+      <div class="save-row">
+        <div class="save-head">
+          <div>
+            <div class="save-name">${esc(s.name)}</div>
+            <div class="save-meta">Szene ${s.scene_number} · ${new Date(s.created_at).toLocaleString()}${s.parent_slot_id?' · ↳ Branch':''}</div>
+          </div>
+          <div class="save-actions">
+            <button class="btn btn-outline btn-sm" onclick="restoreSave(${s.id})">↻ Laden</button>
+            <button class="btn btn-outline btn-sm" onclick="branchSave(${s.id}, '${esc(s.name).replace(/'/g,"\\'")}')">🌿 Branch</button>
+            <button class="btn btn-danger-ghost btn-sm" onclick="deleteSave(${s.id})">🗑</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function createSave() {
+  const name = (document.getElementById('newSaveName')?.value || '').trim();
+  try {
+    const r = await api('/api/saves', 'POST', { story_id: state.currentStoryId, name });
+    showToast(`Gespeichert: ${r.name}`);
+    document.getElementById('newSaveName').value = '';
+    await loadSaves();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function restoreSave(slotId) {
+  if (!confirm('Aktuellen Spielstand mit diesem Save überschreiben? (Aktuelle Position geht verloren — speichere ggf. vorher.)')) return;
+  try {
+    await api(`/api/saves/${slotId}/restore`, 'POST');
+    showToast('Spielstand wiederhergestellt — lade Story…');
+    closeSavesModal();
+    if (typeof selectStory === 'function') await selectStory(state.currentStoryId);
+    else location.reload();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function branchSave(slotId, baseName) {
+  const newName = prompt('Name für die neue Branch-Story:', `${baseName} – Branch`);
+  if (!newName) return;
+  try {
+    const r = await api(`/api/saves/${slotId}/branch`, 'POST', { new_name: newName });
+    showToast(`Branch "${r.name}" erstellt — wechsle…`);
+    closeSavesModal();
+    if (typeof loadStories === 'function') await loadStories();
+    if (typeof selectStory === 'function') await selectStory(r.story_id);
+    else location.reload();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function deleteSave(slotId) {
+  if (!confirm('Diesen Save löschen?')) return;
+  try {
+    await api(`/api/saves/${state.currentStoryId}/${slotId}`, 'DELETE');
+    showToast('Save gelöscht.');
+    await loadSaves();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MEMORIES (Phase 6)
+// ══════════════════════════════════════════════════════════════════════════════
+async function openMemoriesModal() {
+  if (!_requireStory()) return;
+  document.getElementById('memoriesModal').classList.remove('hidden');
+  await loadMemories();
+}
+function closeMemoriesModal() { document.getElementById('memoriesModal').classList.add('hidden'); }
+
+function _renderMemories(rows, withScore=false) {
+  const list = document.getElementById('memoriesList');
+  if (!list) return;
+  if (!rows || rows.length === 0) {
+    list.innerHTML = '<p class="form-hint" style="text-align:center;padding:18px">Keine Erinnerungen gefunden.</p>';
+    return;
+  }
+  list.innerHTML = rows.map(m => `
+    <div class="memory-row">
+      <div class="mem-meta">
+        <span>Szene ${m.scene_number} · <em>${esc(m.kind||'')}</em>${m.embed_model?' · '+esc(m.embed_model):''}${withScore && m.score !== undefined?` · <span class="mem-score">sim ${(m.score*100).toFixed(0)}%</span>`:''}</span>
+        <button class="mem-del" title="Löschen" onclick="deleteMemory(${m.id})">✕</button>
+      </div>
+      <div class="mem-text">${esc(m.text||'')}</div>
+    </div>
+  `).join('');
+}
+
+async function loadMemories() {
+  try {
+    const r = await api(`/api/memories/${state.currentStoryId}`);
+    _renderMemories((r && r.memories) || [], false);
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function searchMemories() {
+  const q = (document.getElementById('memorySearchInput')?.value || '').trim();
+  if (!q) return loadMemories();
+  try {
+    const r = await api('/api/memories/search', 'POST', { story_id: state.currentStoryId, query: q, top_k: 10 });
+    _renderMemories((r && r.results) || [], true);
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function createMemory() {
+  const text = (document.getElementById('newMemoryText')?.value || '').trim();
+  if (!text) return;
+  try {
+    await api('/api/memories', 'POST', { story_id: state.currentStoryId, text, scene_number: state.scene || 0, kind: 'manual' });
+    document.getElementById('newMemoryText').value = '';
+    showToast('Erinnerung gespeichert.');
+    await loadMemories();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function deleteMemory(id) {
+  try {
+    await api(`/api/memories/${state.currentStoryId}/${id}`, 'DELETE');
+    await loadMemories();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
+
+async function clearAllMemories() {
+  if (!confirm('Wirklich ALLE Erinnerungen dieser Story löschen? Das ist nicht umkehrbar.')) return;
+  try {
+    const r = await api(`/api/memories/${state.currentStoryId}`, 'DELETE');
+    showToast(`${r.deleted || 0} Erinnerungen gelöscht.`);
+    await loadMemories();
+  } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+}
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);

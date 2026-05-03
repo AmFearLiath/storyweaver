@@ -1,6 +1,7 @@
 import json
 import httpx
-from backend.database import get_story_config, get_characters, get_recent_events, get_llm_config, get_world_state, save_world_state, update_character_state
+from backend.database import get_story_config, get_characters, get_recent_events, get_llm_config, get_world_state, save_world_state, update_character_state, get_factions, update_faction_state
+from backend.memory import remember, recall
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
@@ -320,7 +321,7 @@ def _format_world_state_block(world_state: dict | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_system_prompt(config: dict, characters: list, output_language: str = "Deutsch", world_state: dict = None) -> str:
+def build_system_prompt(config: dict, characters: list, output_language: str = "Deutsch", world_state: dict = None, factions: list | None = None) -> str:
     # ── Forbidden phrases ──────────────────────────────────────────────────────
     forbidden = config.get("forbidden_phrases", [])
     if isinstance(forbidden, str):
@@ -434,6 +435,38 @@ def build_system_prompt(config: dict, characters: list, output_language: str = "
 
     char_descriptions = prot_section + other_section
 
+    # ── Factions (Phase 7) ────────────────────────────────────────────────────
+    factions_block = ""
+    if factions:
+        def _att_label(v: int) -> str:
+            v = int(v or 0)
+            if v >= 75:  return "treu ergeben"
+            if v >= 40:  return "freundlich"
+            if v >= 15:  return "wohlwollend"
+            if v >= -14: return "neutral"
+            if v >= -39: return "misstrauisch"
+            if v >= -74: return "feindselig"
+            return "todfeindlich"
+        flines = ["", "## FRAKTIONEN & GRUPPEN"]
+        for f in factions:
+            if (f.get("status") or "active") == "dissolved":
+                continue
+            ap = int(f.get("attitude_player") or 0)
+            head = f"### {f.get('name','?')} — Haltung zum Spieler: {ap:+d} ({_att_label(ap)})"
+            flines.append(head)
+            if f.get("description"):
+                flines.append(f"Beschreibung: {f['description']}")
+            if f.get("traits"):
+                flines.append(f"Charakteristik: {f['traits']}")
+            if f.get("goals"):
+                flines.append(f"Ziele: {f['goals']}")
+            atts = f.get("attitudes") or {}
+            if isinstance(atts, dict) and atts:
+                pairs = ", ".join(f"{k}: {int(v):+d}" for k, v in atts.items())
+                flines.append(f"Beziehungen zu anderen: {pairs}")
+        if len(flines) > 2:
+            factions_block = "\n".join(flines) + "\n"
+
     # ── Style ──────────────────────────────────────────────────────────────────
     style_map = {
         "einfach":    "einfache, klare Sprache ohne Schnörkel",
@@ -520,7 +553,7 @@ Genre: {genre}
 {config.get("story_frame", "")}
 
 {char_descriptions}
-
+{factions_block}
 ## SPIELREGELN
 {rules_str}
 
@@ -890,6 +923,73 @@ async def _extract_world_state(
         return parsed
     except Exception:
         return None
+
+
+async def _extract_faction_changes(
+    story_text: str,
+    factions: list,
+    model: str,
+    num_ctx: int = 4096,
+    output_language: str = "Deutsch",
+) -> list:
+    """Phase 7: Cataloger detects faction-level shifts (rep/attitude/status) per scene.
+    Returns list of {name, attitude_player_delta, attitudes_changes, status, new}.
+    Skips silently if no factions exist."""
+    if not factions:
+        return []
+    fac_lines = []
+    for f in factions:
+        ap = int(f.get("attitude_player") or 0)
+        fac_lines.append(f"- {f.get('name','?')} (zum Spieler {ap:+d}, Status {f.get('status','active')})")
+    fac_summary = "\n".join(fac_lines)
+    sys_prompt = (
+        "Du bist ein Fraktions-Analysator fuer ein Textadventure. "
+        "Antworte NUR mit JSON-Array (kein Markdown). "
+        "Schema: [{\"name\":\"Fraktion\",\"attitude_player_delta\":-5..+5,"
+        "\"attitudes_changes\":{\"AndereFraktion\":-3..+3},\"status\":\"active|hostile|allied|dissolved\","
+        "\"new\":false,\"description\":\"...\"}] "
+        "REGELN: Aenderungen nur, wenn der Szenentext klar ein Verhalten ODER Ereignis "
+        "zeigt, das die Beziehung beeinflusst. Werte in kleinen Schritten (-5..+5 fuer Spieler, "
+        "-3..+3 unter Fraktionen). Wenn nichts geschieht: leeres Array. "
+        "Wenn die Szene eine NEUE Fraktion einfuehrt, setze \"new\":true und fuelle description. "
+        "Maximal 4 Eintraege pro Szene. Keine Erklaerungen."
+    )
+    user_prompt = (
+        f"Bekannte Fraktionen:\n{fac_summary}\n\n"
+        f"=== SZENENTEXT ===\n{story_text[:2000]}\n\n"
+        f"Welche Fraktions-Aenderungen sind plausibel? Sprache: {output_language}."
+    )
+    payload = {
+        "model": model,
+        "system": sys_prompt,
+        "prompt": user_prompt,
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0.1, "num_predict": 350, "num_ctx": num_ctx},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            resp = await client.post(OLLAMA_URL, json=payload)
+            resp.raise_for_status()
+            raw = resp.json().get("response", "")
+        s = raw.strip()
+        if s.startswith("["):
+            try:
+                arr = json.loads(s)
+                if isinstance(arr, list):
+                    return [x for x in arr if isinstance(x, dict) and x.get("name")]
+            except Exception:
+                pass
+        parsed = _extract_json(raw)
+        if isinstance(parsed, list):
+            return [x for x in parsed if isinstance(x, dict) and x.get("name")]
+        if isinstance(parsed, dict):
+            for v in parsed.values():
+                if isinstance(v, list):
+                    return [x for x in v if isinstance(x, dict) and x.get("name")]
+        return []
+    except Exception:
+        return []
 
 
 async def _extract_character_states(
@@ -1440,12 +1540,15 @@ async def generate_scene(
 
     config     = get_story_config(story_id)
     characters = get_characters(story_id)
+    factions   = get_factions(story_id)
     llm_cfg    = get_llm_config()
 
     memory_depth    = int(llm_cfg.get("memory_depth", "3"))
     cfg_num_predict = int(llm_cfg.get("num_predict", "1600"))
     num_ctx         = int(llm_cfg.get("num_ctx", "4096"))
     output_language = llm_cfg.get("output_language", "Deutsch")
+    embedding_model = (llm_cfg.get("embedding_model") or "").strip()
+    memory_top_k    = int(llm_cfg.get("memory_top_k", "3") or "3")
 
     world_state = get_world_state(story_id)
     events      = get_recent_events(story_id, limit=max(memory_depth, 8))
@@ -1520,7 +1623,7 @@ async def generate_scene(
         if isinstance(opts, list):
             recent_options.append(opts)
 
-    system_prompt = build_system_prompt(config, characters, output_language, world_state)
+    system_prompt = build_system_prompt(config, characters, output_language, world_state, factions=factions)
     _detail_map = {
         "niedrig": "1 Absatz",
         "mittel":  "1–2 Absätze",
@@ -1540,6 +1643,24 @@ async def generate_scene(
         user_prompt = (
             f"## RECAP DER BISHERIGEN STORY\n{recap_text}\n\n" + user_prompt
         )
+
+    # ── Memory recall (Phase 6) ────────────────────────────────────────────
+    try:
+        recall_query = (cleaned_action or "").strip()
+        if recap_text:
+            recall_query = (recap_text[:400] + "\n\n" + recall_query).strip()
+        if recall_query and memory_top_k > 0:
+            await _emit("recall", "🧠 Erinnerungen abrufen")
+            mems = await recall(story_id, recall_query, top_k=memory_top_k,
+                                model=embedding_model, exclude_recent=1)
+            if mems:
+                lines = ["## RELEVANTE ERINNERUNGEN (aus früheren Szenen)"]
+                for m in mems:
+                    sn = m.get("scene_number") or "?"
+                    lines.append(f"- [Szene {sn}] {m.get('text','').strip()}")
+                user_prompt = "\n".join(lines) + "\n\n" + user_prompt
+    except Exception:
+        pass
 
     async def _call_ollama(sys_prompt: str, usr_prompt: str, num_predict: int = cfg_num_predict) -> str:
         payload = {
@@ -1622,7 +1743,8 @@ async def generate_scene(
         await _emit("extract", "📦 Welt aktualisieren")
         new_ws_task   = _extract_world_state(result["story"], world_state, config, cataloger_model, num_ctx, output_language, glossary=glossary)
         char_upd_task = _extract_character_states(result["story"], characters, cataloger_model, num_ctx, output_language, glossary=glossary)
-        new_ws, char_updates = await asyncio.gather(new_ws_task, char_upd_task, return_exceptions=False)
+        fac_upd_task  = _extract_faction_changes(result["story"], factions, cataloger_model, num_ctx, output_language)
+        new_ws, char_updates, fac_updates = await asyncio.gather(new_ws_task, char_upd_task, fac_upd_task, return_exceptions=False)
         if new_ws:
             new_ws["scene"] = scene_number
             # Preserve directive across extraction (extractor doesn't know about it)
@@ -1641,6 +1763,17 @@ async def generate_scene(
                 new_experiences=upd.get("new_experiences"),
                 skill_changes=upd.get("skill_changes"),
             )
+        # Apply faction changes (Phase 7)
+        for fu in (fac_updates or []):
+            try:
+                update_faction_state(
+                    story_id, fu["name"],
+                    attitude_player_delta=fu.get("attitude_player_delta"),
+                    attitudes_changes=fu.get("attitudes_changes"),
+                    status=fu.get("status") if fu.get("status") in ("active","hostile","allied","dissolved") else None,
+                )
+            except Exception:
+                pass
         _ws = new_ws or world_state or {}
         result["world_items"]         = _ws.get("world_items", [])
         result["location"]            = _ws.get("location", "") or ""
@@ -1656,6 +1789,24 @@ async def generate_scene(
         result["coherence_issues"]    = coherence.get("issues", [])
         result["recap"]               = recap_text
         result["interpreted_player_action"] = cleaned_action
+        # Persist a short memory of this scene for future recall
+        try:
+            mem_text_parts = []
+            if cleaned_action:
+                mem_text_parts.append(f"Aktion: {cleaned_action}")
+            if recap_text:
+                mem_text_parts.append(f"Recap: {recap_text}")
+            else:
+                # Use first ~280 chars of story as scene memory
+                story_snip = (result.get("story") or "")[:280].strip()
+                if story_snip:
+                    mem_text_parts.append(f"Szene: {story_snip}")
+            mem_text = "\n".join(mem_text_parts).strip()
+            if mem_text:
+                await remember(story_id, mem_text, scene_number=scene_number,
+                               kind="scene", model=embedding_model)
+        except Exception:
+            pass
         await _emit("done", "✅ Fertig")
         return result
 
@@ -1712,6 +1863,14 @@ async def generate_scene(
         result2["coherence_issues"]    = ["Fallback-Modus aktiviert"]
         result2["recap"]               = recap_text
         result2["interpreted_player_action"] = cleaned_action
+        try:
+            snip = (result2.get("story") or "")[:280].strip()
+            if snip:
+                mt = (f"Aktion: {cleaned_action}\nSzene: {snip}").strip()
+                await remember(story_id, mt, scene_number=scene_number,
+                               kind="scene", model=embedding_model)
+        except Exception:
+            pass
         await _emit("done", "✅ Fertig")
         return result2
 

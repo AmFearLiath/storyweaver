@@ -37,6 +37,9 @@
     <a href="/admin" class="btn btn-ghost btn-sm" title="Admin-Bereich" target="_blank">🛡️ Admin</a>
     <button class="btn btn-ghost btn-sm" onclick="openLLMModal()" title="LLM-Einstellungen">⚙️ LLM</button>
     <button class="btn btn-ghost btn-sm" onclick="openHistoryModal()" title="Verlauf">📜 Verlauf</button>
+    <button class="btn btn-ghost btn-sm" onclick="openFactionsModal()" title="Fraktionen">🛡 Fraktionen</button>
+    <button class="btn btn-ghost btn-sm" onclick="openSavesModal()" title="Save-Slots / Branching">💾 Saves</button>
+    <button class="btn btn-ghost btn-sm" onclick="openMemoriesModal()" title="Erinnerungen">🧠 Memory</button>
     <button class="btn btn-ghost btn-sm" onclick="exportStoryMarkdown()" title="Story als Markdown speichern">💾 Export</button>
     <button class="btn btn-ghost btn-sm" id="undoBtn" onclick="undoLastAction()" disabled title="Letzte Aktion zurücknehmen (Strg+Z)">↶ Undo</button>
     <button class="btn btn-ghost btn-sm" onclick="openShortcutsModal()" title="Tastatur-Shortcuts (?)">⌨️</button>
@@ -843,6 +846,17 @@
       <p class="setting-desc">Wie viele vergangene Szenen das Modell berücksichtigt. Mehr = bessere Kontinuität, aber mehr Kontext-Verbrauch.</p>
     </div>
 
+    <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px;margin-top:10px">
+      <label class="setting-label" style="margin-bottom:8px;display:block">🧬 Erinnerungs-Vektor-DB</label>
+      <p class="setting-desc" style="margin:0 0 10px">Speichert pro Szene eine Erinnerung und holt bei jeder neuen Szene die thematisch passenden zurück. Embedding-Modell leer = deterministischer Hash-Fallback (kein Modell nötig).</p>
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:8px 10px;align-items:center">
+        <label class="setting-label" style="margin:0">Embedding-Modell</label>
+        <select id="embeddingModel" class="select-field"><option value="">— Hash-Fallback —</option></select>
+        <label class="setting-label" style="margin:0">Top-K Erinnerungen</label>
+        <input type="number" id="memoryTopK" class="input-field" min="0" max="10" value="3" />
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="saveLLMSettings()">💾 Speichern</button>
       <button class="btn btn-ghost" onclick="closeLLMModal()">Schließen</button>
@@ -887,6 +901,73 @@
       <p style="margin-top:14px;font-size:11px;color:var(--text-dim);text-align:center">
         Shortcuts funktionieren nicht, während ein Eingabefeld fokussiert ist.
       </p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ FACTIONS MODAL ══ -->
+<div id="factionsModal" class="modal-overlay hidden" onclick="closeFactionsModal()">
+  <div class="modal-content" onclick="event.stopPropagation()" style="max-width:780px">
+    <div class="modal-header">
+      <h2>🛡 Fraktionen & Gruppen</h2>
+      <button class="modal-close" onclick="closeFactionsModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="form-hint" style="margin-bottom:10px">Fraktionen sind Gruppen, Gilden, Familien oder Organisationen mit eigener Haltung gegenüber dem Spieler. Werte −100…+100. Der Cataloger passt sie nach Aktionen automatisch an.</p>
+      <div id="factionsList" class="factions-list"></div>
+      <button class="btn btn-outline btn-sm mt-2" onclick="addFactionRow()">＋ Fraktion hinzufügen</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveAllFactions()">💾 Speichern</button>
+      <button class="btn btn-ghost" onclick="closeFactionsModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SAVES MODAL ══ -->
+<div id="savesModal" class="modal-overlay hidden" onclick="closeSavesModal()">
+  <div class="modal-content" onclick="event.stopPropagation()" style="max-width:680px">
+    <div class="modal-header">
+      <h2>💾 Save-Slots & Branching</h2>
+      <button class="modal-close" onclick="closeSavesModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="form-hint" style="margin-bottom:10px">Speichere den aktuellen Spielstand. Beim <em>Wiederherstellen</em> wird die laufende Story überschrieben. Beim <em>Branchen</em> entsteht eine neue Story aus diesem Punkt — die ursprüngliche bleibt unangetastet.</p>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input type="text" id="newSaveName" class="input-field" placeholder="Optional: Name (z.B. „Vor dem Verrat")" />
+        <button class="btn btn-primary" onclick="createSave()">＋ Speichern</button>
+      </div>
+      <div id="savesList" class="saves-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSavesModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MEMORIES MODAL ══ -->
+<div id="memoriesModal" class="modal-overlay hidden" onclick="closeMemoriesModal()">
+  <div class="modal-content" onclick="event.stopPropagation()" style="max-width:780px">
+    <div class="modal-header">
+      <h2>🧠 Erinnerungen (Vektor-DB)</h2>
+      <button class="modal-close" onclick="closeMemoriesModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="form-hint" style="margin-bottom:10px">Persistente Notizen, die das Modell bei thematisch ähnlichen Aktionen automatisch wieder einblendet. Die meisten werden nach jeder Szene automatisch erstellt — du kannst eigene anlegen oder unwichtige löschen.</p>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input type="text" id="memorySearchInput" class="input-field" placeholder="Suchen (semantisch)…" />
+        <button class="btn btn-outline btn-sm" onclick="searchMemories()">🔎</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadMemories()">↻</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input type="text" id="newMemoryText" class="input-field" placeholder="Eigene Erinnerung hinzufügen…" />
+        <button class="btn btn-primary btn-sm" onclick="createMemory()">＋</button>
+      </div>
+      <div id="memoriesList" class="memories-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger-ghost" onclick="clearAllMemories()">🗑 Alle löschen</button>
+      <button class="btn btn-ghost" onclick="closeMemoriesModal()">Schließen</button>
     </div>
   </div>
 </div>

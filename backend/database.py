@@ -179,6 +179,56 @@ def _create_tables(conn):
         )
     """)
 
+    # ── Memory Vector DB (Phase 6) ──────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            story_id INTEGER NOT NULL,
+            scene_number INTEGER DEFAULT 0,
+            kind TEXT DEFAULT 'recap',
+            text TEXT NOT NULL,
+            embedding BLOB,
+            embed_model TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_memories_story ON memories(story_id)")
+
+    # ── Faction System (Phase 7) ────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS factions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            story_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            status TEXT DEFAULT 'active',
+            attitude_player INTEGER DEFAULT 0,
+            attitudes_json TEXT DEFAULT '{}',
+            traits TEXT DEFAULT '',
+            goals TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_factions_story ON factions(story_id)")
+
+    # ── Save-Slots / Branching (Phase 8) ────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS save_slots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            story_id INTEGER NOT NULL,
+            parent_slot_id INTEGER,
+            name TEXT NOT NULL,
+            scene_number INTEGER DEFAULT 0,
+            snapshot_json TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_saves_story ON save_slots(story_id)")
+
     conn.commit()
 
 
@@ -195,6 +245,9 @@ def _ensure_global_config(conn):
         ("model_cataloger",   ""),
         ("model_choicemaker", ""),
         ("model_interpreter", ""),
+        # Memory Vector DB (Phase 6)
+        ("embedding_model", ""),
+        ("memory_top_k", "3"),
     ]
     for key, value in defaults:
         c.execute("INSERT OR IGNORE INTO global_config (key, value) VALUES (?, ?)", (key, value))
@@ -687,6 +740,367 @@ def save_event(
     return event_id
 
 
+# ── Memory Vector DB (Phase 6) ────────────────────────────────────────────────
+
+def add_memory(story_id: int, text: str, scene_number: int = 0,
+               kind: str = "recap", embedding: bytes | None = None,
+               embed_model: str = "") -> int:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO memories (story_id, scene_number, kind, text, embedding, embed_model)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (story_id, scene_number, kind, text, embedding, embed_model),
+    )
+    mid = c.lastrowid
+    conn.commit()
+    conn.close()
+    return mid
+
+
+def get_memories(story_id: int, limit: int = 500) -> list:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, scene_number, kind, text, embedding, embed_model, created_at "
+        "FROM memories WHERE story_id=? ORDER BY id DESC LIMIT ?",
+        (story_id, limit),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_memories(story_id: int) -> int:
+    conn = get_connection()
+    c = conn.execute("DELETE FROM memories WHERE story_id=?", (story_id,))
+    conn.commit()
+    n = c.rowcount
+    conn.close()
+    return n
+
+
+def delete_memory(memory_id: int, story_id: int) -> bool:
+    conn = get_connection()
+    c = conn.execute("DELETE FROM memories WHERE id=? AND story_id=?", (memory_id, story_id))
+    conn.commit()
+    ok = c.rowcount > 0
+    conn.close()
+    return ok
+
+
+# ── Factions (Phase 7) ────────────────────────────────────────────────────────
+
+def get_factions(story_id: int) -> list:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM factions WHERE story_id=? ORDER BY id ASC", (story_id,)
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attitudes"] = json.loads(d.get("attitudes_json") or "{}")
+        except Exception:
+            d["attitudes"] = {}
+        out.append(d)
+    return out
+
+
+def upsert_faction(
+    story_id: int, name: str, description: str = "", status: str = "active",
+    attitude_player: int = 0, attitudes: dict | None = None,
+    traits: str = "", goals: str = "", faction_id: int | None = None,
+) -> int:
+    att_json = json.dumps(attitudes or {})
+    ap = max(-100, min(100, int(attitude_player)))
+    conn = get_connection()
+    c = conn.cursor()
+    if faction_id:
+        c.execute(
+            """UPDATE factions SET name=?, description=?, status=?, attitude_player=?,
+               attitudes_json=?, traits=?, goals=?, updated_at=CURRENT_TIMESTAMP
+               WHERE id=? AND story_id=?""",
+            (name, description, status, ap, att_json, traits, goals, faction_id, story_id),
+        )
+        fid = faction_id
+    else:
+        c.execute(
+            """INSERT INTO factions (story_id, name, description, status,
+               attitude_player, attitudes_json, traits, goals)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (story_id, name, description, status, ap, att_json, traits, goals),
+        )
+        fid = c.lastrowid
+    conn.commit()
+    conn.close()
+    return fid
+
+
+def delete_faction(faction_id: int, story_id: int) -> bool:
+    conn = get_connection()
+    c = conn.execute("DELETE FROM factions WHERE id=? AND story_id=?", (faction_id, story_id))
+    conn.commit()
+    ok = c.rowcount > 0
+    conn.close()
+    return ok
+
+
+def update_faction_state(
+    story_id: int, name: str,
+    attitude_player_delta: int | None = None,
+    attitudes_changes: dict | None = None,
+    status: str | None = None,
+):
+    """Apply incremental updates from the cataloger. Creates faction if missing."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM factions WHERE story_id=? AND LOWER(name)=LOWER(?)",
+        (story_id, name),
+    ).fetchone()
+    if not row:
+        conn.close()
+        # Auto-create with neutral defaults
+        return upsert_faction(story_id, name, attitude_player=int(attitude_player_delta or 0),
+                              attitudes=attitudes_changes or {})
+    updates, values = [], []
+    cur_ap = int(row["attitude_player"] or 0)
+    if attitude_player_delta is not None:
+        new_ap = max(-100, min(100, cur_ap + int(attitude_player_delta)))
+        updates.append("attitude_player = ?"); values.append(new_ap)
+    if attitudes_changes:
+        try:
+            cur_att = json.loads(row["attitudes_json"] or "{}")
+        except Exception:
+            cur_att = {}
+        for tgt, delta in (attitudes_changes or {}).items():
+            try:
+                d = int(delta)
+            except Exception:
+                continue
+            cur_att[tgt] = max(-100, min(100, int(cur_att.get(tgt, 0)) + d))
+        updates.append("attitudes_json = ?"); values.append(json.dumps(cur_att))
+    if status:
+        updates.append("status = ?"); values.append(status)
+    if updates:
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        values.extend([row["id"], story_id])
+        conn.execute(
+            f"UPDATE factions SET {', '.join(updates)} WHERE id=? AND story_id=?",
+            values,
+        )
+        conn.commit()
+    conn.close()
+
+
+# ── Save-Slots / Branching (Phase 8) ─────────────────────────────────────────
+
+def get_save_slots(story_id: int) -> list:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, story_id, parent_slot_id, name, scene_number, created_at "
+        "FROM save_slots WHERE story_id=? ORDER BY id DESC", (story_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_save_slot(slot_id: int) -> dict | None:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM save_slots WHERE id=?", (slot_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def create_save_slot(story_id: int, name: str, scene_number: int,
+                     snapshot_json: str, parent_slot_id: int | None = None) -> int:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO save_slots (story_id, parent_slot_id, name, scene_number, snapshot_json)
+           VALUES (?, ?, ?, ?, ?)""",
+        (story_id, parent_slot_id, name, scene_number, snapshot_json),
+    )
+    sid = c.lastrowid
+    conn.commit()
+    conn.close()
+    return sid
+
+
+def delete_save_slot(slot_id: int, story_id: int) -> bool:
+    conn = get_connection()
+    c = conn.execute("DELETE FROM save_slots WHERE id=? AND story_id=?", (slot_id, story_id))
+    conn.commit()
+    ok = c.rowcount > 0
+    conn.close()
+    return ok
+
+
+def replace_story_state(story_id: int, snapshot: dict):
+    """Atomic restore: replace world_state, characters, events, factions, memories
+    of the story with snapshot data. Used by save/restore + branch."""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        # World state
+        ws = snapshot.get("world_state") or {}
+        c.execute(
+            "INSERT INTO game_world_state (story_id, state_json, updated_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(story_id) DO UPDATE SET state_json=excluded.state_json, "
+            "updated_at=CURRENT_TIMESTAMP",
+            (story_id, json.dumps(ws)),
+        )
+        # Scene counter
+        sc = int(snapshot.get("scene_counter") or 0)
+        c.execute("UPDATE stories SET scene_counter=? WHERE id=?", (sc, story_id))
+
+        # Wipe old data for the story
+        c.execute("DELETE FROM events WHERE story_id=?", (story_id,))
+        c.execute("DELETE FROM characters WHERE story_id=?", (story_id,))
+        c.execute("DELETE FROM factions WHERE story_id=?", (story_id,))
+        c.execute("DELETE FROM memories WHERE story_id=?", (story_id,))
+
+        # Re-insert characters
+        for ch in snapshot.get("characters") or []:
+            c.execute(
+                """INSERT INTO characters
+                   (story_id, name, role, is_protagonist, description, status, age,
+                    physical_traits, default_clothing, superpowers, likes, dislikes,
+                    favorite_weapon, relationships, current_clothing, inventory,
+                    experiences, avatar_path, skills)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    story_id, ch.get("name", ""), ch.get("role", ""),
+                    int(ch.get("is_protagonist") or 0), ch.get("description", ""),
+                    ch.get("status", "alive"), ch.get("age", ""),
+                    ch.get("physical_traits", ""), ch.get("default_clothing", ""),
+                    ch.get("superpowers", ""), ch.get("likes", ""),
+                    ch.get("dislikes", ""), ch.get("favorite_weapon", ""),
+                    json.dumps(ch.get("relationships") or []),
+                    ch.get("current_clothing", ""),
+                    json.dumps(ch.get("inventory") or []),
+                    json.dumps(ch.get("experiences") or []),
+                    ch.get("avatar_path", ""),
+                    json.dumps(ch.get("skills") or {}),
+                ),
+            )
+
+        # Re-insert events
+        for ev in snapshot.get("events") or []:
+            c.execute(
+                """INSERT INTO events
+                   (story_id, scene_number, story_text, player_action, interpreted_action,
+                    events_summary, world_changes, character_updates, options_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    story_id, int(ev.get("scene_number") or 0),
+                    ev.get("story_text", ""), ev.get("player_action", ""),
+                    ev.get("interpreted_action", ""), ev.get("events_summary", ""),
+                    ev.get("world_changes", ""), ev.get("character_updates", ""),
+                    json.dumps(ev.get("options") or []),
+                ),
+            )
+
+        # Re-insert factions
+        for f in snapshot.get("factions") or []:
+            c.execute(
+                """INSERT INTO factions
+                   (story_id, name, description, status, attitude_player,
+                    attitudes_json, traits, goals)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    story_id, f.get("name", ""), f.get("description", ""),
+                    f.get("status", "active"),
+                    int(f.get("attitude_player") or 0),
+                    json.dumps(f.get("attitudes") or {}),
+                    f.get("traits", ""), f.get("goals", ""),
+                ),
+            )
+
+        # Re-insert memories (without embeddings — they will be re-computed on demand)
+        for m in snapshot.get("memories") or []:
+            c.execute(
+                """INSERT INTO memories (story_id, scene_number, kind, text, embed_model)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    story_id, int(m.get("scene_number") or 0),
+                    m.get("kind", "recap"), m.get("text", ""),
+                    m.get("embed_model", ""),
+                ),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clone_story(source_story_id: int, new_name: str, user_id: int) -> int:
+    """Create a fresh story row that copies story_config from source. Caller fills
+    state via replace_story_state()."""
+    conn = get_connection()
+    src = conn.execute("SELECT * FROM stories WHERE id=?", (source_story_id,)).fetchone()
+    if not src:
+        conn.close()
+        raise ValueError("source story not found")
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO stories (user_id, name, description, scene_counter, story_config) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_id, new_name, src["description"], 0, src["story_config"]),
+    )
+    new_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def snapshot_story(story_id: int) -> dict:
+    """Collect the full mutable game state for save-slot creation."""
+    conn = get_connection()
+    sc_row = conn.execute("SELECT scene_counter FROM stories WHERE id=?", (story_id,)).fetchone()
+    ws_row = conn.execute("SELECT state_json FROM game_world_state WHERE story_id=?", (story_id,)).fetchone()
+    chars = [dict(r) for r in conn.execute("SELECT * FROM characters WHERE story_id=?", (story_id,)).fetchall()]
+    events = [dict(r) for r in conn.execute("SELECT * FROM events WHERE story_id=? ORDER BY id ASC", (story_id,)).fetchall()]
+    facs = [dict(r) for r in conn.execute("SELECT * FROM factions WHERE story_id=?", (story_id,)).fetchall()]
+    mems = [dict(r) for r in conn.execute(
+        "SELECT scene_number, kind, text, embed_model FROM memories WHERE story_id=? ORDER BY id ASC",
+        (story_id,),
+    ).fetchall()]
+    conn.close()
+
+    # Parse JSON fields back to native
+    for ch in chars:
+        for col, default in (("relationships", []), ("inventory", []),
+                             ("experiences", []), ("skills", {})):
+            v = ch.get(col)
+            if isinstance(v, str):
+                try: ch[col] = json.loads(v or json.dumps(default))
+                except Exception: ch[col] = default
+    for ev in events:
+        try: ev["options"] = json.loads(ev.get("options_json") or "[]")
+        except Exception: ev["options"] = []
+        ev.pop("options_json", None)
+    for f in facs:
+        try: f["attitudes"] = json.loads(f.get("attitudes_json") or "{}")
+        except Exception: f["attitudes"] = {}
+        f.pop("attitudes_json", None)
+
+    try:
+        ws = json.loads(ws_row["state_json"]) if ws_row and ws_row["state_json"] else {}
+    except Exception:
+        ws = {}
+
+    return {
+        "scene_counter": int(sc_row["scene_counter"]) if sc_row else 0,
+        "world_state": ws,
+        "characters": chars,
+        "events": events,
+        "factions": facs,
+        "memories": mems,
+    }
+
+
+
 def increment_scene(story_id: int) -> int:
     conn = get_connection()
     row = conn.execute("SELECT scene_counter FROM stories WHERE id=?", (story_id,)).fetchone()
@@ -790,3 +1204,5 @@ def save_world_state(story_id: int, state: dict):
     )
     conn.commit()
     conn.close()
+
+

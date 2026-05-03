@@ -28,10 +28,16 @@ from backend.database import (
     update_character_state,
     # config
     get_llm_config, set_llm_config,
+    # memory / factions / saves
+    get_memories, add_memory, delete_memory, delete_memories,
+    get_factions, upsert_faction, delete_faction, update_faction_state,
+    get_save_slots, get_save_slot, create_save_slot, delete_save_slot,
+    snapshot_story, replace_story_state, clone_story,
     # db connection (used in import)
     get_connection,
 )
 from backend.llm import generate_scene, check_ollama_connection, call_ollama_json, _flatten_field
+from backend.memory import remember as memory_remember, recall as memory_recall
 
 app = FastAPI(title="Adventure Game Master", version="2.0.0")
 
@@ -359,6 +365,204 @@ async def export_character_json(story_id: int, char_id: int, user: dict = Depend
 async def remove_character(story_id: int, char_id: int, user: dict = Depends(require_user)):
     require_story(story_id, user)
     delete_character(char_id, story_id)
+    return {"success": True}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FACTIONS (Phase 7)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class FactionModel(BaseModel):
+    id: int | None = None
+    story_id: int
+    name: str
+    description: str = ""
+    status: str = "active"
+    attitude_player: int = 0
+    attitudes: dict = {}
+    traits: str = ""
+    goals: str = ""
+
+
+@app.get("/api/factions/{story_id}")
+async def list_factions(story_id: int, user: dict = Depends(require_user)):
+    require_story(story_id, user)
+    return {"factions": get_factions(story_id)}
+
+
+@app.post("/api/factions")
+async def save_faction(f: FactionModel, user: dict = Depends(require_user)):
+    require_story(f.story_id, user)
+    if not f.name.strip():
+        raise HTTPException(status_code=400, detail="Name erforderlich.")
+    fid = upsert_faction(
+        story_id=f.story_id,
+        name=f.name.strip(),
+        description=f.description,
+        status=f.status,
+        attitude_player=f.attitude_player,
+        attitudes=dict(f.attitudes) if isinstance(f.attitudes, dict) else {},
+        traits=f.traits,
+        goals=f.goals,
+        faction_id=f.id,
+    )
+    return {"success": True, "id": fid}
+
+
+@app.delete("/api/factions/{story_id}/{faction_id}")
+async def remove_faction(story_id: int, faction_id: int, user: dict = Depends(require_user)):
+    require_story(story_id, user)
+    ok = delete_faction(faction_id, story_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Fraktion nicht gefunden.")
+    return {"success": True}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MEMORIES (Phase 6)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class MemoryRequest(BaseModel):
+    story_id: int
+    text: str
+    scene_number: int = 0
+    kind: str = "manual"
+
+
+@app.get("/api/memories/{story_id}")
+async def list_memories(story_id: int, user: dict = Depends(require_user)):
+    require_story(story_id, user)
+    rows = get_memories(story_id, limit=500)
+    # Strip BLOB so the response stays small
+    out = [
+        {k: v for k, v in r.items() if k != "embedding"}
+        for r in rows
+    ]
+    return {"memories": out}
+
+
+@app.post("/api/memories")
+async def add_memory_endpoint(req: MemoryRequest, user: dict = Depends(require_user)):
+    require_story(req.story_id, user)
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text leer.")
+    cfg = get_llm_config()
+    mid = await memory_remember(
+        req.story_id, text,
+        scene_number=req.scene_number,
+        kind=req.kind or "manual",
+        model=(cfg.get("embedding_model") or "").strip(),
+    )
+    return {"success": True, "id": mid}
+
+
+@app.delete("/api/memories/{story_id}/{memory_id}")
+async def remove_memory(story_id: int, memory_id: int, user: dict = Depends(require_user)):
+    require_story(story_id, user)
+    delete_memory(memory_id, story_id)
+    return {"success": True}
+
+
+@app.delete("/api/memories/{story_id}")
+async def clear_memories(story_id: int, user: dict = Depends(require_user)):
+    require_story(story_id, user)
+    n = delete_memories(story_id)
+    return {"success": True, "deleted": n}
+
+
+class MemorySearchRequest(BaseModel):
+    story_id: int
+    query: str
+    top_k: int = 5
+
+
+@app.post("/api/memories/search")
+async def search_memories(req: MemorySearchRequest, user: dict = Depends(require_user)):
+    require_story(req.story_id, user)
+    cfg = get_llm_config()
+    res = await memory_recall(
+        req.story_id, req.query, top_k=max(1, min(20, req.top_k)),
+        model=(cfg.get("embedding_model") or "").strip(),
+        exclude_recent=0,
+    )
+    return {"results": [{k: v for k, v in r.items() if k != "embedding"} for r in res]}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SAVE-SLOTS / BRANCHING (Phase 8)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class SaveCreateRequest(BaseModel):
+    story_id: int
+    name: str = ""
+    parent_slot_id: int | None = None
+
+
+class SaveBranchRequest(BaseModel):
+    new_name: str = ""
+
+
+@app.get("/api/saves/{story_id}")
+async def list_saves(story_id: int, user: dict = Depends(require_user)):
+    require_story(story_id, user)
+    return {"saves": get_save_slots(story_id)}
+
+
+@app.post("/api/saves")
+async def create_save(req: SaveCreateRequest, user: dict = Depends(require_user)):
+    story = require_story(req.story_id, user)
+    snap = snapshot_story(req.story_id)
+    name = (req.name or "").strip()
+    if not name:
+        sn = int(snap.get("scene_counter") or 0)
+        from datetime import datetime
+        name = f"Auto-Save Szene {sn} – {datetime.now().strftime('%d.%m. %H:%M')}"
+    slot_id = create_save_slot(
+        story_id=req.story_id, name=name,
+        scene_number=int(snap.get("scene_counter") or 0),
+        snapshot_json=json.dumps(snap, ensure_ascii=False),
+        parent_slot_id=req.parent_slot_id,
+    )
+    return {"success": True, "id": slot_id, "name": name}
+
+
+@app.post("/api/saves/{slot_id}/restore")
+async def restore_save(slot_id: int, user: dict = Depends(require_user)):
+    slot = get_save_slot(slot_id)
+    if not slot:
+        raise HTTPException(status_code=404, detail="Save-Slot nicht gefunden.")
+    require_story(slot["story_id"], user)
+    try:
+        snap = json.loads(slot["snapshot_json"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Snapshot beschädigt.")
+    replace_story_state(slot["story_id"], snap)
+    return {"success": True, "story_id": slot["story_id"], "scene": snap.get("scene_counter", 0)}
+
+
+@app.post("/api/saves/{slot_id}/branch")
+async def branch_save(slot_id: int, req: SaveBranchRequest, user: dict = Depends(require_user)):
+    slot = get_save_slot(slot_id)
+    if not slot:
+        raise HTTPException(status_code=404, detail="Save-Slot nicht gefunden.")
+    src = require_story(slot["story_id"], user)
+    try:
+        snap = json.loads(slot["snapshot_json"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Snapshot beschädigt.")
+    base_name = (req.new_name or "").strip() or f"{src.get('name','Story')} – Branch"
+    new_id = clone_story(slot["story_id"], base_name, user["id"])
+    replace_story_state(new_id, snap)
+    return {"success": True, "story_id": new_id, "name": base_name}
+
+
+@app.delete("/api/saves/{story_id}/{slot_id}")
+async def remove_save(story_id: int, slot_id: int, user: dict = Depends(require_user)):
+    require_story(story_id, user)
+    ok = delete_save_slot(slot_id, story_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Save-Slot nicht gefunden.")
     return {"success": True}
 
 
@@ -1063,6 +1267,7 @@ async def save_llm(req: LLMConfigRequest, user: dict = Depends(require_user)):
         "num_ctx", "num_predict", "output_language", "memory_depth",
         "model_storyteller", "model_director", "model_cataloger",
         "model_choicemaker", "model_interpreter",
+        "embedding_model", "memory_top_k",
     }
     for key, value in req.config.items():
         if key in allowed:
